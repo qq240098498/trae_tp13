@@ -1,4 +1,4 @@
-import type { ServiceItem, Order, OrderStatus, AppNotification, OrderItem } from '../../shared/types'
+import type { ServiceItem, Order, OrderStatus, AppNotification, OrderItem, PerformActionRequest } from '../../shared/types'
 
 const BASE = '/api'
 
@@ -51,6 +51,7 @@ function normalizeOrder(order: any): Order {
     totalPrice: parseNumber(order.totalPrice),
     items: (order.items || []).map(normalizeOrderItem),
     statusHistory: order.statusHistory || [],
+    availableActions: order.availableActions || [],
   }
 }
 
@@ -102,6 +103,11 @@ export async function createOrder(data: {
   remark?: string
 }): Promise<Order> {
   const result = await request<any>('/orders', { method: 'POST', body: JSON.stringify(data) })
+  return normalizeOrder(result)
+}
+
+export async function performAction(id: string, action: PerformActionRequest): Promise<Order> {
+  const result = await request<any>(`/orders/${id}/actions`, { method: 'POST', body: JSON.stringify(action) })
   return normalizeOrder(result)
 }
 

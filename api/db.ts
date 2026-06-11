@@ -75,10 +75,53 @@ const ready = new Promise<Database>((resolve, reject) => {
           order_id INTEGER NOT NULL,
           status TEXT NOT NULL,
           operator TEXT NOT NULL DEFAULT '系统',
+          action_category TEXT NOT NULL DEFAULT 'status_primary',
+          action_code TEXT NOT NULL,
+          action_name TEXT NOT NULL,
+          remark TEXT,
+          metadata TEXT,
+          from_status TEXT,
           timestamp TEXT NOT NULL DEFAULT (datetime('now')),
           FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         );
       `)
+
+      const columns = db.exec("PRAGMA table_info(status_records)")
+      const colNames = columns[0]?.values.map(c => c[1]) || []
+      if (!colNames.includes('action_category')) {
+        db.run("ALTER TABLE status_records ADD COLUMN action_category TEXT NOT NULL DEFAULT 'status_primary'")
+      }
+      if (!colNames.includes('action_code')) {
+        db.run("ALTER TABLE status_records ADD COLUMN action_code TEXT")
+      }
+      if (!colNames.includes('action_name')) {
+        db.run("ALTER TABLE status_records ADD COLUMN action_name TEXT")
+      }
+      if (!colNames.includes('remark')) {
+        db.run("ALTER TABLE status_records ADD COLUMN remark TEXT")
+      }
+      if (!colNames.includes('metadata')) {
+        db.run("ALTER TABLE status_records ADD COLUMN metadata TEXT")
+      }
+      if (!colNames.includes('from_status')) {
+        db.run("ALTER TABLE status_records ADD COLUMN from_status TEXT")
+      }
+
+      db.run("UPDATE status_records SET action_category = 'status_primary' WHERE action_category IS NULL")
+      db.run("UPDATE status_records SET action_code = 'create' WHERE action_code IS NULL AND status = 'pending'")
+      db.run("UPDATE status_records SET action_code = 'accept' WHERE action_code IS NULL AND status = 'accepted'")
+      db.run("UPDATE status_records SET action_code = 'start_wash' WHERE action_code IS NULL AND status = 'washing'")
+      db.run("UPDATE status_records SET action_code = 'start_inspect' WHERE action_code IS NULL AND status = 'inspecting'")
+      db.run("UPDATE status_records SET action_code = 'complete' WHERE action_code IS NULL AND status = 'completed'")
+      db.run("UPDATE status_records SET action_code = 'pickup' WHERE action_code IS NULL AND status = 'picked_up'")
+      db.run("UPDATE status_records SET action_code = 'cancel' WHERE action_code IS NULL AND status = 'cancelled'")
+      db.run("UPDATE status_records SET action_name = '创建订单' WHERE action_name IS NULL AND status = 'pending'")
+      db.run("UPDATE status_records SET action_name = '接单' WHERE action_name IS NULL AND status = 'accepted'")
+      db.run("UPDATE status_records SET action_name = '开始洗涤' WHERE action_name IS NULL AND status = 'washing'")
+      db.run("UPDATE status_records SET action_name = '进入质检' WHERE action_name IS NULL AND status = 'inspecting'")
+      db.run("UPDATE status_records SET action_name = '订单完成' WHERE action_name IS NULL AND status = 'completed'")
+      db.run("UPDATE status_records SET action_name = '确认取衣' WHERE action_name IS NULL AND status = 'picked_up'")
+      db.run("UPDATE status_records SET action_name = '取消订单' WHERE action_name IS NULL AND status = 'cancelled'")
 
       db.run(`
         CREATE TABLE IF NOT EXISTS notifications (

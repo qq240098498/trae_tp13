@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ServiceItem, Order, OrderStatus, AppNotification } from '../shared/types'
+import type { ServiceItem, Order, OrderStatus, AppNotification, PerformActionRequest } from '../shared/types'
 import * as api from '@/lib/api'
 
 interface AppState {
@@ -24,6 +24,7 @@ interface AppState {
     pickupMethod: string
     remark?: string
   }) => Promise<Order>
+  performAction: (id: string, action: PerformActionRequest) => Promise<void>
   updateStatus: (id: string, status: OrderStatus, operator?: string) => Promise<void>
   cancelOrder: (id: string) => Promise<void>
 
@@ -71,6 +72,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     const order = await api.createOrder({ ...data, items: pricing.items })
     set({ orders: [order, ...get().orders] })
     return order
+  },
+
+  performAction: async (id, action) => {
+    const updated = await api.performAction(id, action)
+    set({
+      orders: get().orders.map(o => o.id === id ? updated : o),
+      currentOrder: get().currentOrder?.id === id ? updated : get().currentOrder,
+    })
   },
 
   updateStatus: async (id, status, operator) => {
