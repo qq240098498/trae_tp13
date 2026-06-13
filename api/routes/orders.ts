@@ -6,33 +6,33 @@ const router = Router()
 
 const STATUS_ACTIONS: Partial<Record<OrderStatus, AvailableAction[]>> = {
   pending: [
-    { code: 'accept', name: '接单', description: '确认接单，订单进入下一阶段', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'accepted' },
+    { code: 'accept', name: '接单', description: '确认接单，订单进入下一阶段，请填写接单人信息', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'accepted', requiresRemark: true },
     { code: 'assign_staff', name: '分配店员', description: '分配负责该订单的店员', category: 'business', buttonStyle: 'secondary', requiresMetadata: ['staffName'] },
     { code: 'contact_customer', name: '联系客户', description: '记录与客户的沟通情况', category: 'business', buttonStyle: 'outline', requiresRemark: true },
     { code: 'add_note', name: '添加备注', description: '添加订单相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
-    { code: 'cancel', name: '取消订单', description: '取消该订单（仅待处理状态可取消）', category: 'status_primary', buttonStyle: 'danger', targetStatus: 'cancelled' },
+    { code: 'cancel', name: '取消订单', description: '取消该订单（仅待处理状态可取消），请填写取消原因', category: 'status_primary', buttonStyle: 'danger', targetStatus: 'cancelled', requiresRemark: true },
   ],
   accepted: [
-    { code: 'start_wash', name: '开始洗涤', description: '确认衣物清点无误，开始洗涤流程', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'washing' },
+    { code: 'start_wash', name: '开始洗涤', description: '确认衣物清点无误，开始洗涤流程，请核对衣物信息', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'washing', requiresRemark: true },
     { code: 'check_clothes', name: '衣物清点', description: '登记收到的衣物数量和状态', category: 'business', buttonStyle: 'secondary', requiresMetadata: ['clothesCount'] },
     { code: 'report_damage', name: '异常登记', description: '登记衣物破损、污渍等异常情况', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType'] },
     { code: 'assign_station', name: '分配工位', description: '分配洗涤工位和设备', category: 'business', buttonStyle: 'outline', requiresMetadata: ['stationNo'] },
     { code: 'add_note', name: '添加备注', description: '添加订单相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   washing: [
-    { code: 'finish_wash', name: '完成洗涤', description: '洗涤完成，进入质检环节', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'inspecting' },
+    { code: 'finish_wash', name: '完成洗涤', description: '洗涤完成，进入质检环节，请确认洗涤质量', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'inspecting', requiresRemark: true },
     { code: 'record_process', name: '记录工艺', description: '记录使用的洗涤工艺参数', category: 'business', buttonStyle: 'secondary', requiresRemark: true, requiresMetadata: ['processType', 'temperature'] },
     { code: 'add_detergent', name: '添加助剂', description: '记录使用的洗涤剂或特殊助剂', category: 'business', buttonStyle: 'outline', requiresRemark: true },
     { code: 'add_note', name: '添加备注', description: '添加洗涤过程中的备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   inspecting: [
-    { code: 'pass_inspect', name: '质检通过', description: '质检合格，订单完成', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'completed' },
+    { code: 'pass_inspect', name: '质检通过', description: '质检合格，订单完成，请确认质检结果', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'completed', requiresRemark: true },
     { code: 'fail_inspect', name: '质检不合格', description: '质检发现问题，退回重新处理', category: 'status_rollback', buttonStyle: 'warning', targetStatus: 'washing', requiresRemark: true },
     { code: 'record_defect', name: '登记瑕疵', description: '记录质检发现的瑕疵问题', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['defectType'] },
     { code: 'add_note', name: '添加备注', description: '添加质检相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   completed: [
-    { code: 'pickup', name: '确认取衣', description: '客户已取走衣物，订单闭环', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'picked_up' },
+    { code: 'pickup', name: '确认取衣', description: '客户已取走衣物，订单闭环，请确认取件人信息', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'picked_up', requiresRemark: true },
     { code: 'issue_voucher', name: '发放取衣凭证', description: '生成并记录取衣凭证号', category: 'business', buttonStyle: 'secondary', requiresMetadata: ['voucherNo'] },
     { code: 'schedule_delivery', name: '安排配送', description: '安排上门配送时间和人员（仅限上门取送）', category: 'business', buttonStyle: 'secondary', requiresRemark: true, requiresMetadata: ['deliveryTime'] },
     { code: 'add_note', name: '添加备注', description: '添加完成后的备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },

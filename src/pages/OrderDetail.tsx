@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Phone, MapPin, Clock, User, Truck, X, AlertTriangle,
+  ArrowLeft, ArrowRight, Phone, MapPin, Clock, User, Truck, X, AlertTriangle,
   CheckCircle2, Circle, XCircle, FileText, BadgeDollarSign, Stethoscope,
   PackageCheck, ClipboardList, Wrench, MessageSquare, RotateCcw,
 } from 'lucide-react'
@@ -78,22 +78,34 @@ interface ActionDialogProps {
   onConfirm: (data: { remark?: string; metadata?: Record<string, any> }) => void
 }
 
-function ActionDialog({ action, onClose, onConfirm }: ActionDialogProps) {
+function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: ActionDialogProps & { currentOrderStatus: OrderStatus }) {
   const [remark, setRemark] = useState('')
   const [metadata, setMetadata] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const requiredFields = action.requiresMetadata ?? []
+  const hasFormFields = requiredFields.length > 0 || action.requiresRemark
+  const isStatusChange = action.category === 'status_primary' || action.category === 'status_rollback'
 
   const handleConfirm = () => {
+    const newErrors: Record<string, string> = {}
+
     if (action.requiresRemark && !remark.trim()) {
-      alert('请填写备注说明')
-      return
+      newErrors.remark = '请填写备注说明'
     }
+
     const missing = requiredFields.filter(k => !metadata[k]?.trim())
     if (missing.length > 0) {
-      alert(`请填写: ${missing.map(k => metadataLabels[k]?.label || k).join(', ')}`)
+      missing.forEach(k => {
+        newErrors[k] = `请填写${metadataLabels[k]?.label || k}`
+      })
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
       return
     }
+
     const processedMeta: Record<string, any> = {}
     for (const k of requiredFields) {
       const def = metadataLabels[k]
@@ -106,101 +118,216 @@ function ActionDialog({ action, onClose, onConfirm }: ActionDialogProps) {
   }
 
   const Icon = iconMap[action.code] || FileText
+  const isDanger = action.buttonStyle === 'danger'
+  const isWarning = action.buttonStyle === 'warning'
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-navy-100">
-          <div className="flex items-center gap-3">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className={cn(
+          'flex items-center justify-between p-6 border-b',
+          isDanger ? 'border-red-100' : isWarning ? 'border-amber-100' : 'border-navy-100'
+        )}>
+          <div className="flex items-center gap-4">
             <div className={cn(
-              'w-10 h-10 rounded-xl flex items-center justify-center',
-              action.buttonStyle === 'danger' ? 'bg-red-50 text-red-600'
-                : action.buttonStyle === 'warning' ? 'bg-amber-50 text-amber-600'
+              'w-12 h-12 rounded-xl flex items-center justify-center',
+              isDanger ? 'bg-red-50 text-red-600'
+                : isWarning ? 'bg-amber-50 text-amber-600'
                 : action.buttonStyle === 'primary' ? 'bg-mint-50 text-mint-600'
                 : 'bg-navy-50 text-navy-600'
             )}>
-              <Icon size={20} />
+              <Icon size={24} />
             </div>
             <div>
-              <h3 className="font-semibold text-navy-800">{action.name}</h3>
-              <p className="text-xs text-navy-400">{categoryLabels[action.category]}</p>
+              <h3 className="font-semibold text-navy-900 text-lg">{action.name}</h3>
+              <p className="text-sm text-navy-400 mt-0.5">{categoryLabels[action.category]}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-navy-400 hover:text-navy-600 transition-colors">
-            <X size={20} />
+          <button onClick={onClose} className="text-navy-400 hover:text-navy-600 transition-colors p-1 rounded-lg hover:bg-navy-50">
+            <X size={22} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
-          <p className="text-sm text-navy-600 bg-navy-50/60 rounded-lg px-3 py-2.5">{action.description}</p>
+        <div className="p-6 space-y-5">
+          {isStatusChange && action.targetStatus && (
+            <div className="relative">
+              <div className={cn(
+                'rounded-xl p-5 flex items-center justify-center gap-3',
+                isDanger ? 'bg-gradient-to-r from-red-50 to-red-100/50 border border-red-200'
+                  : isWarning ? 'bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200'
+                  : 'bg-gradient-to-r from-mint-50 to-mint-100/50 border border-mint-200'
+              )}>
+                <div className="text-center">
+                  <div className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-medium inline-block',
+                    isDanger ? 'bg-red-100 text-red-700'
+                      : isWarning ? 'bg-amber-100 text-amber-700'
+                      : 'bg-white text-navy-700 border border-navy-100 shadow-sm'
+                  )}>
+                    {statusLabels[currentOrderStatus]}
+                  </div>
+                </div>
+                <div className="flex flex-col items-center">
+                  <ArrowRight size={20} className={cn(
+                    'animate-pulse',
+                    isDanger ? 'text-red-500' : isWarning ? 'text-amber-500' : 'text-mint-500'
+                  )} />
+                  <span className="text-[10px] text-navy-400 mt-1">状态变更</span>
+                </div>
+                <div className="text-center">
+                  <div className={cn(
+                    'px-4 py-2 rounded-lg text-sm font-semibold inline-block',
+                    isDanger ? 'bg-red-200 text-red-800'
+                      : isWarning ? 'bg-amber-200 text-amber-800'
+                      : 'bg-mint-200 text-mint-800 shadow-sm'
+                  )}>
+                    {statusLabels[action.targetStatus]}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isDanger && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+              <AlertTriangle size={20} className="text-red-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-red-700">⚠️ 危险操作警告</p>
+                <p className="text-red-600 text-xs mt-1">此操作不可撤销，执行后订单状态将永久变更，请谨慎操作</p>
+              </div>
+            </div>
+          )}
+
+          {isWarning && action.category === 'status_rollback' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+              <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-amber-700">⚠️ 状态回退提醒</p>
+                <p className="text-amber-600 text-xs mt-1">订单将退回上一环节重新处理，请务必填写详细的退回原因说明</p>
+              </div>
+            </div>
+          )}
+
+          {isStatusChange && !isDanger && !isWarning && (
+            <div className="bg-mint-50 border border-mint-200 rounded-xl px-4 py-3.5 flex items-start gap-3">
+              <CheckCircle2 size={20} className="text-mint-500 shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-mint-700">流程推进确认</p>
+                <p className="text-mint-600 text-xs mt-1">确认无误后填写相关信息，点击提交完成状态变更</p>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-navy-50/80 border border-navy-100 rounded-xl px-4 py-3.5">
+            <p className="text-sm text-navy-700 leading-relaxed">{action.description}</p>
+          </div>
 
           {requiredFields.map(fieldKey => {
             const def = metadataLabels[fieldKey] || { label: fieldKey }
-            const isRequired = true
+            const hasError = !!errors[fieldKey]
             if (def.type === 'select') {
               return (
-                <div key={fieldKey}>
-                  <label className="block text-sm font-medium text-navy-700 mb-1.5">
-                    {def.label} {isRequired && <span className="text-red-500">*</span>}
+                <div key={fieldKey} className="space-y-1.5">
+                  <label className="block text-sm font-semibold text-navy-800">
+                    {def.label} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={metadata[fieldKey] || ''}
-                    onChange={e => setMetadata({ ...metadata, [fieldKey]: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-navy-200 text-sm focus:border-mint-400 focus:outline-none focus:ring-2 focus:ring-mint-100 transition-colors"
+                    onChange={e => {
+                      setMetadata({ ...metadata, [fieldKey]: e.target.value })
+                      if (errors[fieldKey]) setErrors({ ...errors, [fieldKey]: '' })
+                    }}
+                    className={cn(
+                      'w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition-colors',
+                      hasError
+                        ? 'border-2 border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/50'
+                        : 'border border-navy-200 focus:border-mint-400 focus:ring-mint-100 bg-white'
+                    )}
                   >
                     <option value="">请选择{def.label}</option>
                     {def.options?.map(opt => (
                       <option key={opt} value={opt}>{opt}</option>
                     ))}
                   </select>
+                  {hasError && <p className="text-xs text-red-500">{errors[fieldKey]}</p>}
                 </div>
               )
             }
             return (
-              <div key={fieldKey}>
-                <label className="block text-sm font-medium text-navy-700 mb-1.5">
-                  {def.label} {isRequired && <span className="text-red-500">*</span>}
+              <div key={fieldKey} className="space-y-1.5">
+                <label className="block text-sm font-semibold text-navy-800">
+                  {def.label} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type={def.type === 'number' ? 'number' : 'text'}
                   value={metadata[fieldKey] || ''}
-                  onChange={e => setMetadata({ ...metadata, [fieldKey]: e.target.value })}
+                  onChange={e => {
+                    setMetadata({ ...metadata, [fieldKey]: e.target.value })
+                    if (errors[fieldKey]) setErrors({ ...errors, [fieldKey]: '' })
+                  }}
                   placeholder={`请输入${def.label}`}
-                  className="w-full px-3 py-2 rounded-lg border border-navy-200 text-sm focus:border-mint-400 focus:outline-none focus:ring-2 focus:ring-mint-100 transition-colors"
+                  className={cn(
+                    'w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition-colors',
+                    hasError
+                      ? 'border-2 border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/50'
+                      : 'border border-navy-200 focus:border-mint-400 focus:ring-mint-100 bg-white'
+                  )}
                 />
+                {hasError && <p className="text-xs text-red-500">{errors[fieldKey]}</p>}
               </div>
             )
           })}
 
-          <div>
-            <label className="block text-sm font-medium text-navy-700 mb-1.5">
-              备注说明 {action.requiresRemark && <span className="text-red-500">*</span>}
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-navy-800">
+              备注说明
+              {action.requiresRemark && <span className="text-red-500 ml-1">*</span>}
+              {!action.requiresRemark && <span className="text-xs font-normal text-navy-400 ml-1">（可选）</span>}
             </label>
             <textarea
               value={remark}
-              onChange={e => setRemark(e.target.value)}
-              rows={3}
-              placeholder={action.requiresRemark ? '请填写备注说明（必填）' : '可选：添加备注信息'}
-              className="w-full px-3 py-2 rounded-lg border border-navy-200 text-sm resize-none focus:border-mint-400 focus:outline-none focus:ring-2 focus:ring-mint-100 transition-colors"
+              onChange={e => {
+                setRemark(e.target.value)
+                if (errors.remark) setErrors({ ...errors, remark: '' })
+              }}
+              rows={action.requiresRemark ? 4 : 3}
+              placeholder={action.requiresRemark
+                ? '请详细填写本次操作的说明信息（如操作人、核对结果、特殊情况等）...'
+                : '可选：添加本次操作的备注信息'
+              }
+              className={cn(
+                'w-full px-4 py-3 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 transition-colors',
+                errors.remark
+                  ? 'border-2 border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/50'
+                  : action.requiresRemark
+                    ? 'border-2 border-mint-200 focus:border-mint-400 focus:ring-mint-100 bg-mint-50/30'
+                    : 'border border-navy-200 focus:border-mint-400 focus:ring-mint-100 bg-white'
+              )}
             />
+            {errors.remark && <p className="text-xs text-red-500">{errors.remark}</p>}
+            {action.requiresRemark && !errors.remark && (
+              <p className="text-xs text-mint-600 flex items-center gap-1">
+                <CheckCircle2 size={12} /> 请填写操作说明以便后续追溯
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex gap-3 p-5 border-t border-navy-100">
+        <div className="flex gap-3 p-6 border-t border-navy-100 bg-navy-50/30 rounded-b-2xl">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2.5 rounded-lg border border-navy-200 text-navy-600 hover:bg-navy-50 text-sm font-medium transition-colors"
+            className="flex-1 px-5 py-3 rounded-xl border border-navy-200 text-navy-700 hover:bg-white text-sm font-medium transition-colors"
           >
             取消
           </button>
           <button
             onClick={handleConfirm}
             className={cn(
-              'flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors',
+              'flex-1 px-5 py-3 rounded-xl text-sm font-semibold transition-all hover:shadow-lg active:scale-[0.98]',
               styleClasses[action.buttonStyle]
             )}
           >
-            确认操作
+            {isDanger ? '⚠️ 确认执行' : isWarning ? '↩️ 确认退回' : '✓ 提交并确认'}
           </button>
         </div>
       </div>
@@ -232,18 +359,11 @@ export default function OrderDetail() {
   const noteActions = order.availableActions.filter(a => a.category === 'note')
 
   const handleActionClick = (action: AvailableAction) => {
-    if (action.requiresRemark || action.requiresMetadata) {
-      setDialogAction(action)
-    } else {
-      handleExecute(action.code, { operator: '店员' })
-    }
+    setDialogAction(action)
   }
 
   const handleExecute = async (code: string, data: Partial<PerformActionRequest>) => {
     if (!id) return
-    if (code === 'cancel') {
-      if (!confirm('确认取消此订单？此操作不可撤销！')) return
-    }
     try {
       await performAction(id, { code, operator: '店员', ...data })
       setDialogAction(null)
@@ -556,6 +676,7 @@ export default function OrderDetail() {
       {dialogAction && (
         <ActionDialog
           action={dialogAction}
+          currentOrderStatus={order.status}
           onClose={() => setDialogAction(null)}
           onConfirm={(data) => handleExecute(dialogAction.code, data)}
         />
