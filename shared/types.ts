@@ -16,6 +16,8 @@ export type DamageType =
 
 export type DamageSeverity = 'minor' | 'moderate' | 'severe'
 
+export type ResponsibilityParty = 'store' | 'customer' | 'both' | 'unknown' | 'third_party'
+
 export type CompensationStatus =
   | 'pending_review'
   | 'approved'
@@ -31,6 +33,7 @@ export interface DamageReport {
   orderItemId?: string
   damageType: DamageType
   severity: DamageSeverity
+  responsibilityParty: ResponsibilityParty
   description: string
   originalValue?: number
   purchaseDate?: string
@@ -38,6 +41,10 @@ export interface DamageReport {
   reportedAt: string
   photos?: string[]
   remark?: string
+  isResolved?: boolean
+  resolvedAt?: string
+  resolutionType?: 'compensation' | 'repair' | 'waive' | 'negotiated_no_comp' | 'closed_no_responsibility'
+  resolutionRemark?: string
 }
 
 export interface CompensationStandard {

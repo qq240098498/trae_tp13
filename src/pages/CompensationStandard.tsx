@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { AlertTriangle, Scale, Calculator, Clock, FileText, Shield, ChevronDown, ChevronUp, Info } from 'lucide-react'
-import { COMPENSATION_RULES, calculateDepreciatedValue, calculateCompensationAmount, damageTypeLabels, damageSeverityLabels } from '../../shared/workflow'
-import type { DamageType, DamageSeverity } from '../../shared/types'
+import { AlertTriangle, Scale, Calculator, Clock, FileText, Shield, ChevronDown, ChevronUp, Info, UserCheck } from 'lucide-react'
+import { COMPENSATION_RULES, calculateDepreciatedValue, calculateCompensationAmount, damageTypeLabels, damageSeverityLabels, responsibilityPartyLabels } from '../../shared/workflow'
+import type { DamageType, DamageSeverity, ResponsibilityParty } from '../../shared/types'
 import { cn } from '@/lib/utils'
 
 export default function CompensationStandard() {
@@ -258,11 +258,11 @@ export default function CompensationStandard() {
           </div>
           <div className="flex items-start gap-2">
             <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">2</span>
-            <span><strong>核实确认：</strong>核实损坏情况，确认衣物原值、购买日期等信息</span>
+            <span><strong>责任认定：</strong>明确损坏责任归属（门店/客户/双方/第三方），选择对应责任方</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">3</span>
-            <span><strong>发起赔偿：</strong>根据赔偿标准计算赔偿金额，发起赔偿申请</span>
+            <span><strong>门店责任：</strong>核实损坏情况，确认衣物原值、购买日期，按赔偿标准发起赔偿</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">4</span>
@@ -271,6 +271,43 @@ export default function CompensationStandard() {
           <div className="flex items-start gap-2">
             <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">5</span>
             <span><strong>结案归档：</strong>赔偿完成后记录支付凭证，订单结案归档</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-5">
+        <h3 className="font-medium text-blue-800 mb-3 flex items-center gap-2">
+          <UserCheck size={18} />
+          责任归属与免赔付说明
+        </h3>
+        <div className="space-y-3 text-sm text-blue-700">
+          <p>
+            登记异常时必须选择<strong>责任归属</strong>，不同责任方对应不同处理方式：
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {(Object.entries(responsibilityPartyLabels) as [ResponsibilityParty, string][]).map(([key, label]) => (
+              <div key={key} className={cn(
+                'rounded-lg px-3 py-2',
+                key === 'store' ? 'bg-rose-50 border border-rose-200' :
+                key === 'customer' ? 'bg-blue-100/50 border border-blue-200' :
+                key === 'both' ? 'bg-purple-50 border border-purple-200' :
+                key === 'unknown' ? 'bg-gray-50 border border-gray-200' :
+                'bg-orange-50 border border-orange-200'
+              )}>
+                <p className="font-medium text-navy-800">{label}</p>
+                <p className="text-xs mt-0.5">
+                  {key === 'store' && '需按赔偿标准赔付'}
+                  {key === 'customer' && '可「非门店责任关闭」，保留异常记录'}
+                  {key === 'both' && '协商处理，可部分赔偿或免赔偿'}
+                  {key === 'unknown' && '待进一步调查确认，后续可更新责任认定'}
+                  {key === 'third_party' && '可「非门店责任关闭」，保留异常记录'}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex items-start gap-2 text-xs text-blue-600">
+            <Info size={14} className="shrink-0 mt-0.5" />
+            <span>非门店责任时选择「非门店责任关闭」操作，订单可回到正常流程，异常记录仍保留备查。如责任认定有误，可随时「更新责任认定」。</span>
           </div>
         </div>
       </div>

@@ -1,6 +1,30 @@
-import type { OrderStatus, PickupMethod, AvailableAction, ActionCategory, DamageType, DamageSeverity, CompensationStatus, CompensationMethod } from './types'
+import type { OrderStatus, PickupMethod, AvailableAction, ActionCategory, DamageType, DamageSeverity, CompensationStatus, CompensationMethod, ResponsibilityParty } from './types'
 
 export { }
+
+export const responsibilityPartyLabels: Record<ResponsibilityParty, string> = {
+  store: '门店责任',
+  customer: '客户责任',
+  both: '双方责任',
+  unknown: '责任待确认',
+  third_party: '第三方责任',
+}
+
+export const responsibilityPartyColors: Record<ResponsibilityParty, string> = {
+  store: 'bg-rose-100 text-rose-700',
+  customer: 'bg-blue-100 text-blue-700',
+  both: 'bg-purple-100 text-purple-700',
+  unknown: 'bg-gray-100 text-gray-700',
+  third_party: 'bg-orange-100 text-orange-700',
+}
+
+export const resolutionTypeLabels: Record<string, string> = {
+  compensation: '已赔偿',
+  repair: '修复后完成',
+  waive: '客户放弃索赔',
+  negotiated_no_comp: '协商免赔偿',
+  closed_no_responsibility: '非门店责任关闭',
+}
 
 export const statusLabels: Record<OrderStatus, string> = {
   pending: '待处理',

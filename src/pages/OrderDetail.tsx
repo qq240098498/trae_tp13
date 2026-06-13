@@ -4,13 +4,13 @@ import {
   ArrowLeft, ArrowRight, Phone, MapPin, Clock, User, Truck, X, AlertTriangle,
   CheckCircle2, Circle, XCircle, FileText, BadgeDollarSign, Stethoscope,
   PackageCheck, ClipboardList, Wrench, MessageSquare, RotateCcw,
-  AlertCircle, DollarSign, CreditCard, Calculator, Info,
+  AlertCircle, DollarSign, CreditCard, Calculator, Info, Shield,
 } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import StatusBadge, { statusLabels } from '@/components/StatusBadge'
-import { damageTypeLabels, damageSeverityLabels, compensationStatusLabels, compensationMethodLabels, calculateCompensationAmount, calculateDepreciatedValue, COMPENSATION_RULES } from '../../shared/workflow'
-import type { OrderStatus, AvailableAction, StatusChange, PerformActionRequest, DamageReport, CompensationRecord, Order, DamageType, DamageSeverity } from '../../shared/types'
+import { damageTypeLabels, damageSeverityLabels, compensationStatusLabels, compensationMethodLabels, calculateCompensationAmount, calculateDepreciatedValue, COMPENSATION_RULES, responsibilityPartyLabels, responsibilityPartyColors, resolutionTypeLabels } from '../../shared/workflow'
+import type { OrderStatus, AvailableAction, StatusChange, PerformActionRequest, DamageReport, CompensationRecord, Order, DamageType, DamageSeverity, ResponsibilityParty } from '../../shared/types'
 
 const styleClasses: Record<AvailableAction['buttonStyle'], string> = {
   primary: 'bg-mint-400 text-navy-900 hover:bg-mint-500 shadow-sm shadow-mint-200',
@@ -43,6 +43,8 @@ const iconMap: Record<string, any> = {
   apply_compensation: BadgeDollarSign,
   repair_then_return: Wrench,
   negotiate_no_comp: MessageSquare,
+  close_no_responsibility: Shield,
+  update_responsibility: AlertCircle,
   approve_compensation: CheckCircle2,
   reject_compensation: XCircle,
   confirm_payout: CheckCircle2,
@@ -59,44 +61,61 @@ const categoryLabels: Record<string, string> = {
 
 const statusTimeline: OrderStatus[] = ['pending', 'accepted', 'washing', 'inspecting', 'completed', 'picked_up']
 
-const metadataLabels: Record<string, { label: string; type?: 'text' | 'number' | 'select'; options?: string[] }> = {
+const metadataLabels: Record<string, { label: string; type?: 'text' | 'number' | 'select' | 'date'; options?: { value: string; label: string }[] }> = {
   staffName: { label: '店员姓名' },
   clothesCount: { label: '衣物数量', type: 'number' },
   damageType: {
     label: '异常类型',
     type: 'select',
-    options: ['破损撕裂', '顽固污渍', '染色串色', '缩水', '变形', '衣物丢失', '配件损坏', '其他损坏'],
+    options: Object.entries(damageTypeLabels).map(([value, label]) => ({ value, label })),
   },
   severity: {
     label: '损坏程度',
     type: 'select',
-    options: ['轻微', '中度', '严重'],
+    options: Object.entries(damageSeverityLabels).map(([value, label]) => ({ value, label })),
+  },
+  responsibilityParty: {
+    label: '责任归属',
+    type: 'select',
+    options: Object.entries(responsibilityPartyLabels).map(([value, label]) => ({ value, label })),
   },
   stationNo: { label: '工位编号' },
   processType: {
     label: '工艺类型',
     type: 'select',
-    options: ['水洗', '干洗', '手洗', '低温洗', '特殊洗涤'],
+    options: [
+      { value: 'water_wash', label: '水洗' },
+      { value: 'dry_clean', label: '干洗' },
+      { value: 'hand_wash', label: '手洗' },
+      { value: 'low_temp', label: '低温洗' },
+      { value: 'special', label: '特殊洗涤' },
+    ],
   },
   temperature: { label: '洗涤温度(°C)', type: 'number' },
   defectType: {
     label: '瑕疵类型',
     type: 'select',
-    options: ['洗涤残留污渍', '未洗净', '轻微损伤', '变形', '其他'],
+    options: [
+      { value: 'residual_stain', label: '洗涤残留污渍' },
+      { value: 'not_clean', label: '未洗净' },
+      { value: 'minor_damage', label: '轻微损伤' },
+      { value: 'deformation', label: '变形' },
+      { value: 'other', label: '其他' },
+    ],
   },
   voucherNo: { label: '取衣凭证号' },
-  deliveryTime: { label: '配送时间' },
-  damageReportId: { label: '损坏报告ID' },
+  deliveryTime: { label: '配送时间', type: 'date' },
+  damageReportId: { label: '关联损坏报告' },
   compensationRecordId: { label: '赔偿记录ID' },
   compensationMethod: {
     label: '赔偿方式',
     type: 'select',
-    options: ['原路退款', '现金赔付', '转账赔付', '服务券抵扣'],
+    options: Object.entries(compensationMethodLabels).map(([value, label]) => ({ value, label })),
   },
   finalAmount: { label: '最终赔偿金额(元)', type: 'number' },
   customRate: { label: '自定义赔偿比例(0-1)', type: 'number' },
   originalValue: { label: '衣物原值(元)', type: 'number' },
-  purchaseDate: { label: '购买日期' },
+  purchaseDate: { label: '购买日期', type: 'date' },
   paidProof: { label: '支付凭证' },
 }
 
@@ -378,7 +397,9 @@ function ActionDialog({ action, order, onClose, onConfirm, currentOrderStatus }:
                     {order.damageReports.map(report => (
                       <option key={report.id} value={report.id}>
                         {damageTypeLabels[report.damageType] || report.damageType} - {damageSeverityLabels[report.severity]}
+                        {` [${responsibilityPartyLabels[report.responsibilityParty] || report.responsibilityParty}]`}
                         {report.originalValue ? ` (原值¥${report.originalValue})` : ''}
+                        {report.isResolved ? ' (已处理)' : ''}
                       </option>
                     ))}
                   </select>
@@ -408,9 +429,15 @@ function ActionDialog({ action, order, onClose, onConfirm, currentOrderStatus }:
                   >
                     <option value="">请选择{def.label}</option>
                     {def.options?.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
+                  {fieldKey === 'responsibilityParty' && metadata[fieldKey] && metadata[fieldKey] !== 'store' && metadata[fieldKey] !== 'unknown' && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 flex items-start gap-2 text-xs text-blue-700">
+                      <Info size={14} className="shrink-0 mt-0.5" />
+                      <span>非门店责任：可选择「非门店责任关闭」免于赔付，异常记录将保留</span>
+                    </div>
+                  )}
                   {hasError && <p className="text-xs text-red-500">{errors[fieldKey]}</p>}
                 </div>
               )
@@ -421,7 +448,7 @@ function ActionDialog({ action, order, onClose, onConfirm, currentOrderStatus }:
                   {def.label} <span className="text-red-500">*</span>
                 </label>
                 <input
-                  type={def.type === 'number' ? 'number' : 'text'}
+                  type={def.type === 'number' ? 'number' : def.type === 'date' ? 'date' : 'text'}
                   value={metadata[fieldKey] || ''}
                   onChange={e => {
                     setMetadata({ ...metadata, [fieldKey]: e.target.value })
@@ -461,13 +488,13 @@ function ActionDialog({ action, order, onClose, onConfirm, currentOrderStatus }:
                       >
                         <option value="">请选择{def.label}</option>
                         {def.options?.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
                     </div>
                   )
                 }
-                const inputType = def.type === 'number' ? 'number' : (fieldKey === 'purchaseDate' ? 'date' : 'text')
+                const inputType = def.type === 'number' ? 'number' : (def.type === 'date' ? 'date' : 'text')
                 return (
                   <div key={fieldKey} className="space-y-1.5">
                     <label className="block text-sm font-medium text-navy-600">
@@ -604,10 +631,16 @@ export default function OrderDetail() {
       <div className="mt-2 space-y-1">
         {Object.entries(metadata).map(([k, v]) => {
           const label = metadataLabels[k]?.label || k
+          const def = metadataLabels[k]
+          let displayValue = String(v)
+          if (def?.type === 'select' && def.options) {
+            const found = def.options.find(o => o.value === String(v))
+            if (found) displayValue = found.label
+          }
           return (
             <div key={k} className="text-xs text-navy-500 flex gap-2">
               <span className="text-navy-400">{label}:</span>
-              <span className="font-medium text-navy-600">{String(v)}</span>
+              <span className="font-medium text-navy-600">{displayValue}</span>
             </div>
           )
         })}
@@ -776,9 +809,16 @@ export default function OrderDetail() {
           </h2>
           <div className="space-y-3">
             {order.damageReports.map((report: DamageReport) => (
-              <div key={report.id} className="bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+              <div key={report.id} className={cn(
+                'rounded-xl p-4 border',
+                report.isResolved
+                  ? report.resolutionType === 'closed_no_responsibility'
+                    ? 'bg-blue-50/30 border-blue-100'
+                    : 'bg-gray-50/30 border-gray-200'
+                  : 'bg-amber-50/50 border-amber-100'
+              )}>
                 <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
                       {damageTypeLabels[report.damageType] || report.damageType}
                     </span>
@@ -790,6 +830,17 @@ export default function OrderDetail() {
                     )}>
                       {damageSeverityLabels[report.severity] || report.severity}
                     </span>
+                    <span className={cn(
+                      'px-2 py-0.5 rounded text-xs font-medium',
+                      responsibilityPartyColors[report.responsibilityParty] || 'bg-gray-100 text-gray-700'
+                    )}>
+                      {responsibilityPartyLabels[report.responsibilityParty] || report.responsibilityParty}
+                    </span>
+                    {report.isResolved && report.resolutionType && (
+                      <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                        {resolutionTypeLabels[report.resolutionType] || report.resolutionType}
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs text-navy-400">
                     {new Date(report.reportedAt).toLocaleString('zh-CN')}
@@ -817,9 +868,20 @@ export default function OrderDetail() {
                     <span className="font-medium text-navy-700">{report.reportedBy}</span>
                   </div>
                 </div>
-                {report.remark && (
+                {report.isResolved && report.resolutionRemark && (
+                  <div className="mt-2 pt-2 border-t border-emerald-100 text-xs text-navy-500">
+                    <span>处理说明：</span>{report.resolutionRemark}
+                  </div>
+                )}
+                {report.remark && !report.isResolved && (
                   <div className="mt-2 pt-2 border-t border-amber-100 text-xs text-navy-500">
                     <span>备注：</span>{report.remark}
+                  </div>
+                )}
+                {report.responsibilityParty && report.responsibilityParty !== 'store' && report.responsibilityParty !== 'unknown' && !report.isResolved && (
+                  <div className="mt-2 pt-2 border-t border-blue-100 bg-blue-50/50 rounded-b-lg px-2 py-1.5 flex items-center gap-1.5 text-xs text-blue-700">
+                    <Info size={12} className="shrink-0" />
+                    <span>非门店责任：可使用「非门店责任关闭」操作免于赔付，异常记录将保留</span>
                   </div>
                 )}
               </div>

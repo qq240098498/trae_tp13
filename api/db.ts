@@ -144,6 +144,7 @@ const ready = new Promise<Database>((resolve, reject) => {
           order_item_id INTEGER,
           damage_type TEXT NOT NULL,
           severity TEXT NOT NULL,
+          responsibility_party TEXT NOT NULL DEFAULT 'unknown',
           description TEXT NOT NULL,
           original_value REAL,
           purchase_date TEXT,
@@ -151,10 +152,32 @@ const ready = new Promise<Database>((resolve, reject) => {
           reported_at TEXT NOT NULL DEFAULT (datetime('now')),
           photos TEXT,
           remark TEXT,
+          is_resolved INTEGER NOT NULL DEFAULT 0,
+          resolved_at TEXT,
+          resolution_type TEXT,
+          resolution_remark TEXT,
           FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
           FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE SET NULL
         );
       `)
+
+      const damageColumns = db.exec("PRAGMA table_info(damage_reports)")
+      const damageColNames = damageColumns[0]?.values.map(c => c[1]) || []
+      if (!damageColNames.includes('responsibility_party')) {
+        db.run("ALTER TABLE damage_reports ADD COLUMN responsibility_party TEXT NOT NULL DEFAULT 'unknown'")
+      }
+      if (!damageColNames.includes('is_resolved')) {
+        db.run("ALTER TABLE damage_reports ADD COLUMN is_resolved INTEGER NOT NULL DEFAULT 0")
+      }
+      if (!damageColNames.includes('resolved_at')) {
+        db.run("ALTER TABLE damage_reports ADD COLUMN resolved_at TEXT")
+      }
+      if (!damageColNames.includes('resolution_type')) {
+        db.run("ALTER TABLE damage_reports ADD COLUMN resolution_type TEXT")
+      }
+      if (!damageColNames.includes('resolution_remark')) {
+        db.run("ALTER TABLE damage_reports ADD COLUMN resolution_remark TEXT")
+      }
 
       db.run(`
         CREATE TABLE IF NOT EXISTS compensation_records (

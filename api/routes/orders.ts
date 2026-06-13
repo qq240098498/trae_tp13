@@ -16,7 +16,7 @@ const STATUS_ACTIONS: Partial<Record<OrderStatus, AvailableAction[]>> = {
   accepted: [
     { code: 'start_wash', name: '开始洗涤', description: '确认衣物清点无误，开始洗涤流程，请核对衣物信息', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'washing', requiresRemark: true },
     { code: 'check_clothes', name: '衣物清点', description: '登记收到的衣物数量和状态', category: 'business', buttonStyle: 'secondary', requiresMetadata: ['clothesCount'] },
-    { code: 'report_damage', name: '异常登记', description: '登记衣物破损、污渍等异常情况', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType'] },
+    { code: 'report_damage', name: '异常登记', description: '登记衣物破损、污渍等异常情况', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType', 'responsibilityParty'] },
     { code: 'assign_station', name: '分配工位', description: '分配洗涤工位和设备', category: 'business', buttonStyle: 'outline', requiresMetadata: ['stationNo'] },
     { code: 'add_note', name: '添加备注', description: '添加订单相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
@@ -24,27 +24,29 @@ const STATUS_ACTIONS: Partial<Record<OrderStatus, AvailableAction[]>> = {
     { code: 'finish_wash', name: '完成洗涤', description: '洗涤完成，进入质检环节，请确认洗涤质量', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'inspecting', requiresRemark: true },
     { code: 'record_process', name: '记录工艺', description: '记录使用的洗涤工艺参数', category: 'business', buttonStyle: 'secondary', requiresRemark: true, requiresMetadata: ['processType', 'temperature'] },
     { code: 'add_detergent', name: '添加助剂', description: '记录使用的洗涤剂或特殊助剂', category: 'business', buttonStyle: 'outline', requiresRemark: true },
-    { code: 'report_damage', name: '异常登记', description: '洗涤过程中发现衣物损坏', category: 'compensation', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType'] },
+    { code: 'report_damage', name: '异常登记', description: '洗涤过程中发现衣物损坏', category: 'compensation', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType', 'responsibilityParty'] },
     { code: 'add_note', name: '添加备注', description: '添加洗涤过程中的备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   inspecting: [
     { code: 'pass_inspect', name: '质检通过', description: '质检合格，订单完成，请确认质检结果', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'completed', requiresRemark: true },
     { code: 'fail_inspect', name: '质检不合格', description: '质检发现问题，退回重新处理', category: 'status_rollback', buttonStyle: 'warning', targetStatus: 'washing', requiresRemark: true },
     { code: 'record_defect', name: '登记瑕疵', description: '记录质检发现的瑕疵问题', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['defectType'] },
-    { code: 'report_damage', name: '损坏登记', description: '质检发现衣物损坏，进入赔偿流程', category: 'compensation', buttonStyle: 'danger', targetStatus: 'damaged', requiresRemark: true, requiresMetadata: ['damageType', 'severity'] },
+    { code: 'report_damage', name: '损坏登记', description: '质检发现衣物损坏，进入赔偿流程', category: 'compensation', buttonStyle: 'danger', targetStatus: 'damaged', requiresRemark: true, requiresMetadata: ['damageType', 'severity', 'responsibilityParty'] },
     { code: 'add_note', name: '添加备注', description: '添加质检相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   completed: [
     { code: 'pickup', name: '确认取衣', description: '客户已取走衣物，订单闭环，请确认取件人信息', category: 'status_primary', buttonStyle: 'primary', targetStatus: 'picked_up', requiresRemark: true },
     { code: 'issue_voucher', name: '发放取衣凭证', description: '生成并记录取衣凭证号', category: 'business', buttonStyle: 'secondary', requiresMetadata: ['voucherNo'] },
     { code: 'schedule_delivery', name: '安排配送', description: '安排上门配送时间和人员（仅限上门取送）', category: 'business', buttonStyle: 'secondary', requiresRemark: true, requiresMetadata: ['deliveryTime'] },
-    { code: 'report_damage', name: '事后异常登记', description: '客户取衣后反馈衣物损坏问题', category: 'compensation', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType'] },
+    { code: 'report_damage', name: '事后异常登记', description: '客户取衣后反馈衣物损坏问题', category: 'compensation', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageType', 'responsibilityParty'] },
     { code: 'add_note', name: '添加备注', description: '添加完成后的备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   damaged: [
-    { code: 'apply_compensation', name: '发起赔偿申请', description: '根据损坏情况发起正式赔偿申请', category: 'compensation', buttonStyle: 'primary', targetStatus: 'compensating', requiresRemark: true, requiresMetadata: ['damageReportId', 'compensationMethod'] },
-    { code: 'repair_then_return', name: '修复后继续', description: '衣物可修复，修复后继续正常流程', category: 'status_rollback', buttonStyle: 'secondary', targetStatus: 'washing', requiresRemark: true },
-    { code: 'negotiate_no_comp', name: '协商免赔偿', description: '与客户协商一致，无需赔偿', category: 'compensation', buttonStyle: 'outline', targetStatus: 'completed', requiresRemark: true },
+    { code: 'apply_compensation', name: '发起赔偿申请', description: '根据损坏情况发起正式赔偿申请（门店责任需赔偿）', category: 'compensation', buttonStyle: 'primary', targetStatus: 'compensating', requiresRemark: true, requiresMetadata: ['damageReportId', 'compensationMethod'] },
+    { code: 'repair_then_return', name: '修复后继续', description: '衣物可修复，修复后继续正常流程', category: 'status_rollback', buttonStyle: 'secondary', targetStatus: 'washing', requiresRemark: true, requiresMetadata: ['damageReportId'] },
+    { code: 'negotiate_no_comp', name: '协商免赔偿', description: '与客户协商一致，无需赔偿', category: 'compensation', buttonStyle: 'outline', targetStatus: 'completed', requiresRemark: true, requiresMetadata: ['damageReportId'] },
+    { code: 'close_no_responsibility', name: '非门店责任关闭', description: '确认非门店责任，无需赔偿，关闭异常记录', category: 'compensation', buttonStyle: 'success', targetStatus: 'completed', requiresRemark: true, requiresMetadata: ['damageReportId'] },
+    { code: 'update_responsibility', name: '更新责任认定', description: '重新认定损坏责任方', category: 'business', buttonStyle: 'warning', requiresRemark: true, requiresMetadata: ['damageReportId', 'responsibilityParty'] },
     { code: 'add_note', name: '添加备注', description: '添加损坏处理相关备注信息', category: 'note', buttonStyle: 'outline', requiresRemark: true },
   ],
   compensating: [
@@ -81,7 +83,7 @@ function getAvailableActions(status: OrderStatus, pickupMethod: PickupMethod): A
 function rowToDamageReport(row: any[]): DamageReport {
   let photos: string[] | undefined
   try {
-    photos = row[9] != null ? JSON.parse(String(row[9])) : undefined
+    photos = row[11] != null ? JSON.parse(String(row[11])) : undefined
   } catch {
     photos = undefined
   }
@@ -91,13 +93,18 @@ function rowToDamageReport(row: any[]): DamageReport {
     orderItemId: row[2] != null ? String(row[2]) : undefined,
     damageType: String(row[3]) as any,
     severity: String(row[4]) as any,
-    description: String(row[5]),
-    originalValue: row[6] != null ? Number(row[6]) : undefined,
-    purchaseDate: row[7] != null ? String(row[7]) : undefined,
-    reportedBy: String(row[8]),
+    responsibilityParty: (row[5] != null ? String(row[5]) : 'unknown') as any,
+    description: String(row[6]),
+    originalValue: row[7] != null ? Number(row[7]) : undefined,
+    purchaseDate: row[8] != null ? String(row[8]) : undefined,
+    reportedBy: String(row[9]),
     reportedAt: String(row[10]),
     photos,
-    remark: row[11] != null ? String(row[11]) : undefined,
+    remark: row[12] != null ? String(row[12]) : undefined,
+    isResolved: row[13] != null ? Boolean(row[13]) : false,
+    resolvedAt: row[14] != null ? String(row[14]) : undefined,
+    resolutionType: row[15] != null ? String(row[15]) as any : undefined,
+    resolutionRemark: row[16] != null ? String(row[16]) : undefined,
   }
 }
 
@@ -239,18 +246,51 @@ async function executeActionImpl(
 
   if (action.code === 'report_damage' && metadata?.damageType) {
     db.run(
-      'INSERT INTO damage_reports (order_id, order_item_id, damage_type, severity, description, original_value, purchase_date, reported_by, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO damage_reports (order_id, order_item_id, damage_type, severity, responsibility_party, description, original_value, purchase_date, reported_by, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         id,
         metadata?.orderItemId ? Number(metadata.orderItemId) : null,
         String(metadata.damageType),
         String(metadata.severity ?? 'moderate'),
+        String(metadata.responsibilityParty ?? 'unknown'),
         String(remark ?? ''),
         metadata?.originalValue ? Number(metadata.originalValue) : null,
         metadata?.purchaseDate ?? null,
         op,
         metadata?.remark ?? null,
       ],
+    )
+  }
+
+  if (action.code === 'close_no_responsibility' && metadata?.damageReportId) {
+    db.run(
+      "UPDATE damage_reports SET is_resolved = 1, resolved_at = datetime('now'), resolution_type = 'closed_no_responsibility', resolution_remark = ? WHERE id = ?",
+      [remark ?? null, Number(metadata.damageReportId)],
+    )
+    db.run(
+      'INSERT INTO notifications (order_id, order_no, type, title, message) VALUES (?, ?, ?, ?, ?)',
+      [id, orderNo, 'system', '异常已关闭', `订单 ${orderNo} 的损坏异常已确认非门店责任，已关闭记录`],
+    )
+  }
+
+  if (action.code === 'update_responsibility' && metadata?.damageReportId && metadata?.responsibilityParty) {
+    db.run(
+      'UPDATE damage_reports SET responsibility_party = ? WHERE id = ?',
+      [String(metadata.responsibilityParty), Number(metadata.damageReportId)],
+    )
+  }
+
+  if (action.code === 'negotiate_no_comp' && metadata?.damageReportId) {
+    db.run(
+      "UPDATE damage_reports SET is_resolved = 1, resolved_at = datetime('now'), resolution_type = 'negotiated_no_comp', resolution_remark = ? WHERE id = ?",
+      [remark ?? null, Number(metadata.damageReportId)],
+    )
+  }
+
+  if (action.code === 'repair_then_return' && metadata?.damageReportId) {
+    db.run(
+      "UPDATE damage_reports SET is_resolved = 1, resolved_at = datetime('now'), resolution_type = 'repair', resolution_remark = ? WHERE id = ?",
+      [remark ?? null, Number(metadata.damageReportId)],
     )
   }
 
