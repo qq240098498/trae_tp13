@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
-import { Home, PlusCircle, ListOrdered, Tag, Bell, Menu, X } from 'lucide-react'
+import { Home, PlusCircle, ListOrdered, Tag, Bell, Menu, X, Scale } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store'
 
@@ -9,6 +9,7 @@ const navItems = [
   { path: '/order/new', label: '新建订单', icon: PlusCircle },
   { path: '/orders', label: '订单列表', icon: ListOrdered },
   { path: '/pricing', label: '价格管理', icon: Tag },
+  { path: '/compensation-standard', label: '赔偿标准', icon: Scale },
   { path: '/notifications', label: '通知中心', icon: Bell },
 ]
 

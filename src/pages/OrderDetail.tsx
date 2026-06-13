@@ -1,14 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, ArrowRight, Phone, MapPin, Clock, User, Truck, X, AlertTriangle,
   CheckCircle2, Circle, XCircle, FileText, BadgeDollarSign, Stethoscope,
   PackageCheck, ClipboardList, Wrench, MessageSquare, RotateCcw,
+  AlertCircle, DollarSign, CreditCard, Calculator, Info,
 } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 import StatusBadge, { statusLabels } from '@/components/StatusBadge'
-import type { OrderStatus, AvailableAction, StatusChange, PerformActionRequest } from '../../shared/types'
+import { damageTypeLabels, damageSeverityLabels, compensationStatusLabels, compensationMethodLabels, calculateCompensationAmount, calculateDepreciatedValue, COMPENSATION_RULES } from '../../shared/workflow'
+import type { OrderStatus, AvailableAction, StatusChange, PerformActionRequest, DamageReport, CompensationRecord, Order, DamageType, DamageSeverity } from '../../shared/types'
 
 const styleClasses: Record<AvailableAction['buttonStyle'], string> = {
   primary: 'bg-mint-400 text-navy-900 hover:bg-mint-500 shadow-sm shadow-mint-200',
@@ -16,6 +18,7 @@ const styleClasses: Record<AvailableAction['buttonStyle'], string> = {
   warning: 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100',
   danger: 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100',
   outline: 'border border-navy-200 text-navy-600 hover:bg-navy-50',
+  success: 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm shadow-emerald-200',
 }
 
 const iconMap: Record<string, any> = {
@@ -37,6 +40,13 @@ const iconMap: Record<string, any> = {
   record_defect: AlertTriangle,
   issue_voucher: FileText,
   schedule_delivery: Truck,
+  apply_compensation: BadgeDollarSign,
+  repair_then_return: Wrench,
+  negotiate_no_comp: MessageSquare,
+  approve_compensation: CheckCircle2,
+  reject_compensation: XCircle,
+  confirm_payout: CheckCircle2,
+  complete_order: PackageCheck,
 }
 
 const categoryLabels: Record<string, string> = {
@@ -44,6 +54,7 @@ const categoryLabels: Record<string, string> = {
   status_rollback: '状态回退',
   business: '业务操作',
   note: '备注记录',
+  compensation: '赔偿操作',
 }
 
 const statusTimeline: OrderStatus[] = ['pending', 'accepted', 'washing', 'inspecting', 'completed', 'picked_up']
@@ -54,7 +65,12 @@ const metadataLabels: Record<string, { label: string; type?: 'text' | 'number' |
   damageType: {
     label: '异常类型',
     type: 'select',
-    options: ['破损', '污渍', '褪色', '变形', '遗失配饰', '其他'],
+    options: ['破损撕裂', '顽固污渍', '染色串色', '缩水', '变形', '衣物丢失', '配件损坏', '其他损坏'],
+  },
+  severity: {
+    label: '损坏程度',
+    type: 'select',
+    options: ['轻微', '中度', '严重'],
   },
   stationNo: { label: '工位编号' },
   processType: {
@@ -70,15 +86,28 @@ const metadataLabels: Record<string, { label: string; type?: 'text' | 'number' |
   },
   voucherNo: { label: '取衣凭证号' },
   deliveryTime: { label: '配送时间' },
+  damageReportId: { label: '损坏报告ID' },
+  compensationRecordId: { label: '赔偿记录ID' },
+  compensationMethod: {
+    label: '赔偿方式',
+    type: 'select',
+    options: ['原路退款', '现金赔付', '转账赔付', '服务券抵扣'],
+  },
+  finalAmount: { label: '最终赔偿金额(元)', type: 'number' },
+  customRate: { label: '自定义赔偿比例(0-1)', type: 'number' },
+  originalValue: { label: '衣物原值(元)', type: 'number' },
+  purchaseDate: { label: '购买日期' },
+  paidProof: { label: '支付凭证' },
 }
 
 interface ActionDialogProps {
   action: AvailableAction
+  order: Order
   onClose: () => void
   onConfirm: (data: { remark?: string; metadata?: Record<string, any> }) => void
 }
 
-function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: ActionDialogProps & { currentOrderStatus: OrderStatus }) {
+function ActionDialog({ action, order, onClose, onConfirm, currentOrderStatus }: ActionDialogProps & { currentOrderStatus: OrderStatus }) {
   const [remark, setRemark] = useState('')
   const [metadata, setMetadata] = useState<Record<string, string>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -86,6 +115,63 @@ function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: Action
   const requiredFields = action.requiresMetadata ?? []
   const hasFormFields = requiredFields.length > 0 || action.requiresRemark
   const isStatusChange = action.category === 'status_primary' || action.category === 'status_rollback'
+  const isCompensationAction = action.category === 'compensation' || action.code === 'report_damage'
+
+  const optionalFields = useMemo(() => {
+    const fields: string[] = []
+    if (action.code === 'report_damage') {
+      if (!requiredFields.includes('severity')) fields.push('severity')
+      if (!requiredFields.includes('originalValue')) fields.push('originalValue')
+      if (!requiredFields.includes('purchaseDate')) fields.push('purchaseDate')
+    }
+    if (action.code === 'apply_compensation') {
+      if (!requiredFields.includes('customRate')) fields.push('customRate')
+    }
+    return fields
+  }, [action.code, requiredFields])
+
+  const damageReportForCompensation = useMemo(() => {
+    if (action.code !== 'apply_compensation' || !metadata.damageReportId) return null
+    return order.damageReports?.find(d => d.id === metadata.damageReportId) || null
+  }, [action.code, metadata.damageReportId, order.damageReports])
+
+  const compensationCalc = useMemo(() => {
+    if (action.code === 'report_damage') {
+      const damageType = metadata.damageType as DamageType || 'tear'
+      const severity = metadata.severity as DamageSeverity || 'moderate'
+      const originalValue = Number(metadata.originalValue) || 0
+      const purchaseDate = metadata.purchaseDate
+      if (!originalValue) return null
+      return calculateCompensationAmount(originalValue, purchaseDate, damageType, severity)
+    }
+    if (action.code === 'apply_compensation' && damageReportForCompensation) {
+      const customRate = metadata.customRate ? Number(metadata.customRate) : undefined
+      return calculateCompensationAmount(
+        damageReportForCompensation.originalValue || 0,
+        damageReportForCompensation.purchaseDate,
+        damageReportForCompensation.damageType,
+        damageReportForCompensation.severity,
+        customRate,
+      )
+    }
+    return null
+  }, [action.code, metadata, damageReportForCompensation])
+
+  const depreciatedValue = useMemo(() => {
+    if (action.code === 'report_damage') {
+      const originalValue = Number(metadata.originalValue) || 0
+      const purchaseDate = metadata.purchaseDate
+      if (!originalValue || !purchaseDate) return null
+      return calculateDepreciatedValue(originalValue, purchaseDate)
+    }
+    if (damageReportForCompensation?.originalValue && damageReportForCompensation.purchaseDate) {
+      return calculateDepreciatedValue(
+        damageReportForCompensation.originalValue,
+        damageReportForCompensation.purchaseDate,
+      )
+    }
+    return null
+  }, [action.code, metadata.originalValue, metadata.purchaseDate, damageReportForCompensation])
 
   const handleConfirm = () => {
     const newErrors: Record<string, string> = {}
@@ -107,7 +193,9 @@ function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: Action
     }
 
     const processedMeta: Record<string, any> = {}
-    for (const k of requiredFields) {
+    const allFields = [...requiredFields, ...optionalFields]
+    for (const k of allFields) {
+      if (!metadata[k]?.trim()) continue
       const def = metadataLabels[k]
       processedMeta[k] = def?.type === 'number' ? Number(metadata[k]) : metadata[k]
     }
@@ -222,9 +310,83 @@ function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: Action
             <p className="text-sm text-navy-700 leading-relaxed">{action.description}</p>
           </div>
 
+          {isCompensationAction && compensationCalc && (
+            <div className="bg-gradient-to-r from-rose-50 to-amber-50 border border-rose-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator size={18} className="text-rose-500" />
+                <span className="font-medium text-navy-800 text-sm">赔偿金额估算</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {action.code === 'report_damage' && metadata.originalValue && (
+                  <div className="bg-white/70 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-navy-500">衣物原值</p>
+                    <p className="text-sm font-semibold text-navy-800">¥{Number(metadata.originalValue).toFixed(2)}</p>
+                  </div>
+                )}
+                {damageReportForCompensation?.originalValue && (
+                  <div className="bg-white/70 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-navy-500">衣物原值</p>
+                    <p className="text-sm font-semibold text-navy-800">¥{damageReportForCompensation.originalValue.toFixed(2)}</p>
+                  </div>
+                )}
+                {depreciatedValue != null && (
+                  <div className="bg-white/70 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-navy-500">折旧后价值</p>
+                    <p className="text-sm font-semibold text-amber-600">¥{depreciatedValue.toFixed(2)}</p>
+                  </div>
+                )}
+                <div className="bg-white/70 rounded-lg px-3 py-2">
+                  <p className="text-[10px] text-navy-500">赔偿比例</p>
+                  <p className="text-sm font-semibold text-navy-700">{Math.round(compensationCalc.rate * 100)}%</p>
+                </div>
+                <div className="bg-white/70 rounded-lg px-3 py-2 col-span-2">
+                  <p className="text-[10px] text-navy-500">预估赔偿金额</p>
+                  <p className="text-xl font-bold text-rose-600">¥{compensationCalc.amount.toFixed(2)}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-1.5 text-[10px] text-navy-500">
+                <Info size={12} className="shrink-0 mt-0.5" />
+                <span>金额范围：¥{compensationCalc.minAmount.toFixed(2)} ~ ¥{compensationCalc.maxAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
           {requiredFields.map(fieldKey => {
             const def = metadataLabels[fieldKey] || { label: fieldKey }
             const hasError = !!errors[fieldKey]
+
+            if (fieldKey === 'damageReportId' && order.damageReports && order.damageReports.length > 0) {
+              return (
+                <div key={fieldKey} className="space-y-1.5">
+                  <label className="block text-sm font-semibold text-navy-800">
+                    {def.label} <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={metadata[fieldKey] || ''}
+                    onChange={e => {
+                      setMetadata({ ...metadata, [fieldKey]: e.target.value })
+                      if (errors[fieldKey]) setErrors({ ...errors, [fieldKey]: '' })
+                    }}
+                    className={cn(
+                      'w-full px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 transition-colors',
+                      hasError
+                        ? 'border-2 border-red-300 focus:border-red-400 focus:ring-red-100 bg-red-50/50'
+                        : 'border border-navy-200 focus:border-mint-400 focus:ring-mint-100 bg-white'
+                    )}
+                  >
+                    <option value="">请选择损坏报告</option>
+                    {order.damageReports.map(report => (
+                      <option key={report.id} value={report.id}>
+                        {damageTypeLabels[report.damageType] || report.damageType} - {damageSeverityLabels[report.severity]}
+                        {report.originalValue ? ` (原值¥${report.originalValue})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {hasError && <p className="text-xs text-red-500">{errors[fieldKey]}</p>}
+                </div>
+              )
+            }
+
             if (def.type === 'select') {
               return (
                 <div key={fieldKey} className="space-y-1.5">
@@ -277,6 +439,52 @@ function ActionDialog({ action, onClose, onConfirm, currentOrderStatus }: Action
               </div>
             )
           })}
+
+          {optionalFields.length > 0 && (
+            <div className="space-y-3 pt-2 border-t border-dashed border-navy-200">
+              <p className="text-xs font-medium text-navy-400 flex items-center gap-1">
+                <Info size={12} />
+                以下为选填项（有助于更准确的赔偿估算）
+              </p>
+              {optionalFields.map(fieldKey => {
+                const def = metadataLabels[fieldKey] || { label: fieldKey }
+                if (def.type === 'select') {
+                  return (
+                    <div key={fieldKey} className="space-y-1.5">
+                      <label className="block text-sm font-medium text-navy-600">
+                        {def.label} <span className="text-navy-400 text-xs">（选填）</span>
+                      </label>
+                      <select
+                        value={metadata[fieldKey] || ''}
+                        onChange={e => setMetadata({ ...metadata, [fieldKey]: e.target.value })}
+                        className="w-full px-4 py-2.5 rounded-xl text-sm border border-navy-200 focus:border-mint-400 focus:ring-2 focus:ring-mint-100 bg-white focus:outline-none transition-colors"
+                      >
+                        <option value="">请选择{def.label}</option>
+                        {def.options?.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                }
+                const inputType = def.type === 'number' ? 'number' : (fieldKey === 'purchaseDate' ? 'date' : 'text')
+                return (
+                  <div key={fieldKey} className="space-y-1.5">
+                    <label className="block text-sm font-medium text-navy-600">
+                      {def.label} <span className="text-navy-400 text-xs">（选填）</span>
+                    </label>
+                    <input
+                      type={inputType}
+                      value={metadata[fieldKey] || ''}
+                      onChange={e => setMetadata({ ...metadata, [fieldKey]: e.target.value })}
+                      placeholder={`请输入${def.label}`}
+                      className="w-full px-4 py-2.5 rounded-xl text-sm border border-navy-200 focus:border-mint-400 focus:ring-2 focus:ring-mint-100 bg-white focus:outline-none transition-colors"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-navy-800">
@@ -357,6 +565,7 @@ export default function OrderDetail() {
   const rollbackActions = order.availableActions.filter(a => a.category === 'status_rollback')
   const businessActions = order.availableActions.filter(a => a.category === 'business')
   const noteActions = order.availableActions.filter(a => a.category === 'note')
+  const compensationActions = order.availableActions.filter(a => a.category === 'compensation')
 
   const handleActionClick = (action: AvailableAction) => {
     setDialogAction(action)
@@ -385,6 +594,7 @@ export default function OrderDetail() {
     if (item.actionCategory === 'status_primary') return 'bg-mint-400 text-white'
     if (item.actionCategory === 'status_rollback') return 'bg-amber-400 text-white'
     if (item.actionCategory === 'business') return 'bg-navy-500 text-white'
+    if (item.actionCategory === 'compensation') return 'bg-rose-500 text-white'
     return 'bg-navy-200 text-navy-600'
   }
 
@@ -557,7 +767,170 @@ export default function OrderDetail() {
         </div>
       </div>
 
-      {(primaryActions.length > 0 || rollbackActions.length > 0 || businessActions.length > 0 || noteActions.length > 0) && (
+      {order.damageReports && order.damageReports.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 p-6 mb-4 shadow-sm">
+          <h2 className="font-medium text-navy-700 mb-4 flex items-center gap-2">
+            <AlertTriangle size={18} className="text-amber-500" />
+            损坏报告
+            <span className="ml-auto text-xs font-normal text-navy-400">共 {order.damageReports.length} 条</span>
+          </h2>
+          <div className="space-y-3">
+            {order.damageReports.map((report: DamageReport) => (
+              <div key={report.id} className="bg-amber-50/50 border border-amber-100 rounded-xl p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700">
+                      {damageTypeLabels[report.damageType] || report.damageType}
+                    </span>
+                    <span className={cn(
+                      'px-2 py-0.5 rounded text-xs font-medium',
+                      report.severity === 'minor' ? 'bg-green-100 text-green-700' :
+                      report.severity === 'moderate' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    )}>
+                      {damageSeverityLabels[report.severity] || report.severity}
+                    </span>
+                  </div>
+                  <span className="text-xs text-navy-400">
+                    {new Date(report.reportedAt).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+                <p className="text-sm text-navy-600 mb-2">{report.description}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                  {report.originalValue != null && (
+                    <div className="flex items-center gap-1 text-navy-500">
+                      <DollarSign size={12} />
+                      <span>衣物原值：</span>
+                      <span className="font-medium text-navy-700">¥{report.originalValue.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {report.purchaseDate && (
+                    <div className="flex items-center gap-1 text-navy-500">
+                      <Clock size={12} />
+                      <span>购买日期：</span>
+                      <span className="font-medium text-navy-700">{report.purchaseDate}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 text-navy-500">
+                    <User size={12} />
+                    <span>登记人：</span>
+                    <span className="font-medium text-navy-700">{report.reportedBy}</span>
+                  </div>
+                </div>
+                {report.remark && (
+                  <div className="mt-2 pt-2 border-t border-amber-100 text-xs text-navy-500">
+                    <span>备注：</span>{report.remark}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {order.compensationRecords && order.compensationRecords.length > 0 && (
+        <div className="bg-white rounded-xl border border-rose-200 p-6 mb-4 shadow-sm">
+          <h2 className="font-medium text-navy-700 mb-4 flex items-center gap-2">
+            <BadgeDollarSign size={18} className="text-rose-500" />
+            赔偿记录
+            <span className="ml-auto text-xs font-normal text-navy-400">共 {order.compensationRecords.length} 条</span>
+          </h2>
+          <div className="space-y-3">
+            {order.compensationRecords.map((record: CompensationRecord) => (
+              <div key={record.id} className="bg-rose-50/30 border border-rose-100 rounded-xl p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={cn(
+                      'px-2.5 py-1 rounded-lg text-xs font-medium',
+                      record.status === 'pending_review' ? 'bg-amber-100 text-amber-700' :
+                      record.status === 'approved' ? 'bg-green-100 text-green-700' :
+                      record.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                      record.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                      'bg-navy-100 text-navy-700'
+                    )}>
+                      {compensationStatusLabels[record.status] || record.status}
+                    </span>
+                    <span className="text-2xl font-bold text-rose-600">
+                      ¥{record.amount.toFixed(2)}
+                    </span>
+                  </div>
+                  <span className="text-xs text-navy-400">
+                    申请时间：{new Date(record.appliedAt).toLocaleString('zh-CN')}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-navy-400">赔偿方式</span>
+                    <p className="font-medium text-navy-700 flex items-center gap-1">
+                      <CreditCard size={12} />
+                      {compensationMethodLabels[record.compensationMethod] || record.compensationMethod}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-navy-400">赔偿比例</span>
+                    <p className="font-medium text-navy-700">{Math.round(record.standardRate * 100)}%</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-navy-400">折旧后价值</span>
+                    <p className="font-medium text-navy-700">¥{record.appliedValue.toFixed(2)}</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-navy-400">申请人</span>
+                    <p className="font-medium text-navy-700">{record.applicant}</p>
+                  </div>
+                </div>
+                {record.reviewer && (
+                  <div className="mt-3 pt-3 border-t border-rose-100 grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-navy-400">审核人</span>
+                      <p className="font-medium text-navy-700">{record.reviewer}</p>
+                    </div>
+                    {record.reviewedAt && (
+                      <div className="space-y-0.5">
+                        <span className="text-navy-400">审核时间</span>
+                        <p className="font-medium text-navy-700">{new Date(record.reviewedAt).toLocaleString('zh-CN')}</p>
+                      </div>
+                    )}
+                    {record.reviewRemark && (
+                      <div className="col-span-2 space-y-0.5">
+                        <span className="text-navy-400">审核意见</span>
+                        <p className="text-navy-600">{record.reviewRemark}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {record.payer && (
+                  <div className="mt-3 pt-3 border-t border-rose-100 grid grid-cols-2 gap-3 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-navy-400">赔付人</span>
+                      <p className="font-medium text-navy-700">{record.payer}</p>
+                    </div>
+                    {record.paidAt && (
+                      <div className="space-y-0.5">
+                        <span className="text-navy-400">赔付时间</span>
+                        <p className="font-medium text-navy-700">{new Date(record.paidAt).toLocaleString('zh-CN')}</p>
+                      </div>
+                    )}
+                    {record.paidProof && (
+                      <div className="col-span-2 space-y-0.5">
+                        <span className="text-navy-400">支付凭证</span>
+                        <p className="text-navy-600">{record.paidProof}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {record.remark && (
+                  <div className="mt-3 pt-2 border-t border-rose-100 text-xs text-navy-500">
+                    <span>备注：</span>{record.remark}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(primaryActions.length > 0 || rollbackActions.length > 0 || businessActions.length > 0 || noteActions.length > 0 || compensationActions.length > 0) && (
         <div className="bg-white rounded-xl border border-navy-100 p-6 mb-4 shadow-sm">
           <h2 className="font-medium text-navy-700 mb-4 flex items-center gap-2">
             <Wrench size={18} className="text-navy-500" />
@@ -581,6 +954,16 @@ export default function OrderDetail() {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {rollbackActions.map(renderActionButton)}
+                </div>
+              </div>
+            )}
+            {compensationActions.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-rose-600 mb-2 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" /> {categoryLabels.compensation}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {compensationActions.map(renderActionButton)}
                 </div>
               </div>
             )}
@@ -639,6 +1022,7 @@ export default function OrderDetail() {
                           item.actionCategory === 'status_primary' ? 'bg-mint-50 text-mint-600'
                             : item.actionCategory === 'status_rollback' ? 'bg-amber-50 text-amber-600'
                             : item.actionCategory === 'business' ? 'bg-navy-50 text-navy-600'
+                            : item.actionCategory === 'compensation' ? 'bg-rose-50 text-rose-600'
                             : 'bg-navy-50 text-navy-500'
                         )}>
                           {categoryLabels[item.actionCategory]}
@@ -676,6 +1060,7 @@ export default function OrderDetail() {
       {dialogAction && (
         <ActionDialog
           action={dialogAction}
+          order={order}
           currentOrderStatus={order.status}
           onClose={() => setDialogAction(null)}
           onConfirm={(data) => handleExecute(dialogAction.code, data)}

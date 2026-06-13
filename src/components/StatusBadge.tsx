@@ -9,6 +9,9 @@ const statusLabels: Record<OrderStatus, string> = {
   completed: '已完成',
   picked_up: '已取衣',
   cancelled: '已取消',
+  damaged: '已损坏',
+  compensating: '赔偿中',
+  compensated: '已赔偿',
 }
 
 const statusColors: Record<OrderStatus, string> = {
@@ -19,6 +22,9 @@ const statusColors: Record<OrderStatus, string> = {
   completed: 'bg-mint-50 text-mint-600',
   picked_up: 'bg-gray-100 text-gray-600',
   cancelled: 'bg-red-100 text-red-700',
+  damaged: 'bg-rose-100 text-rose-700',
+  compensating: 'bg-amber-100 text-amber-700',
+  compensated: 'bg-emerald-100 text-emerald-700',
 }
 
 export { statusLabels, statusColors }

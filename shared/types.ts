@@ -1,8 +1,79 @@
-export type OrderStatus = 'pending' | 'accepted' | 'washing' | 'inspecting' | 'completed' | 'picked_up' | 'cancelled'
+export type OrderStatus = 'pending' | 'accepted' | 'washing' | 'inspecting' | 'completed' | 'picked_up' | 'cancelled' | 'damaged' | 'compensating' | 'compensated'
 
 export type PickupMethod = 'self' | 'delivery'
 
-export type ActionCategory = 'status_primary' | 'status_rollback' | 'business' | 'note'
+export type ActionCategory = 'status_primary' | 'status_rollback' | 'business' | 'note' | 'compensation'
+
+export type DamageType =
+  | 'tear'
+  | 'stain'
+  | 'discoloration'
+  | 'shrinkage'
+  | 'deformation'
+  | 'missing'
+  | 'accessory_damage'
+  | 'other'
+
+export type DamageSeverity = 'minor' | 'moderate' | 'severe'
+
+export type CompensationStatus =
+  | 'pending_review'
+  | 'approved'
+  | 'rejected'
+  | 'paid'
+  | 'closed'
+
+export type CompensationMethod = 'refund' | 'cash' | 'transfer' | 'service_voucher'
+
+export interface DamageReport {
+  id: string
+  orderId: string
+  orderItemId?: string
+  damageType: DamageType
+  severity: DamageSeverity
+  description: string
+  originalValue?: number
+  purchaseDate?: string
+  reportedBy: string
+  reportedAt: string
+  photos?: string[]
+  remark?: string
+}
+
+export interface CompensationStandard {
+  severity: DamageSeverity
+  minRate: number
+  maxRate: number
+  description: string
+}
+
+export interface CompensationRecord {
+  id: string
+  orderId: string
+  damageReportId: string
+  status: CompensationStatus
+  amount: number
+  compensationMethod: CompensationMethod
+  standardRate: number
+  appliedValue: number
+  reviewer?: string
+  reviewedAt?: string
+  reviewRemark?: string
+  payer?: string
+  paidAt?: string
+  paidProof?: string
+  applicant: string
+  appliedAt: string
+  remark?: string
+}
+
+export interface CompensationRule {
+  damageType: DamageType
+  standards: CompensationStandard[]
+  maxCompensationAmount?: number
+  depreciationRatePerYear?: number
+  requirePurchaseProof?: boolean
+}
 
 export interface ServiceItem {
   id: string
@@ -43,7 +114,7 @@ export interface AvailableAction {
   name: string
   description: string
   category: ActionCategory
-  buttonStyle: 'primary' | 'secondary' | 'warning' | 'danger' | 'outline'
+  buttonStyle: 'primary' | 'secondary' | 'warning' | 'danger' | 'outline' | 'success'
   icon?: string
   requiresRemark?: boolean
   requiresMetadata?: string[]
@@ -70,6 +141,8 @@ export interface Order {
   remark?: string
   statusHistory: StatusChange[]
   availableActions: AvailableAction[]
+  damageReports?: DamageReport[]
+  compensationRecords?: CompensationRecord[]
   createdAt: string
   updatedAt: string
 }

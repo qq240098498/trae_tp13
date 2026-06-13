@@ -137,6 +137,49 @@ const ready = new Promise<Database>((resolve, reject) => {
         );
       `)
 
+      db.run(`
+        CREATE TABLE IF NOT EXISTS damage_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          order_item_id INTEGER,
+          damage_type TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          description TEXT NOT NULL,
+          original_value REAL,
+          purchase_date TEXT,
+          reported_by TEXT NOT NULL,
+          reported_at TEXT NOT NULL DEFAULT (datetime('now')),
+          photos TEXT,
+          remark TEXT,
+          FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+          FOREIGN KEY (order_item_id) REFERENCES order_items(id) ON DELETE SET NULL
+        );
+      `)
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS compensation_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          damage_report_id INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending_review',
+          amount REAL NOT NULL,
+          compensation_method TEXT NOT NULL,
+          standard_rate REAL NOT NULL,
+          applied_value REAL NOT NULL,
+          reviewer TEXT,
+          reviewed_at TEXT,
+          review_remark TEXT,
+          payer TEXT,
+          paid_at TEXT,
+          paid_proof TEXT,
+          applicant TEXT NOT NULL,
+          applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+          remark TEXT,
+          FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+          FOREIGN KEY (damage_report_id) REFERENCES damage_reports(id) ON DELETE CASCADE
+        );
+      `)
+
       const count = db.exec('SELECT COUNT(*) AS cnt FROM service_items')
       const rowCount = count[0]?.values[0]?.[0] as number
       if (rowCount === 0) {
