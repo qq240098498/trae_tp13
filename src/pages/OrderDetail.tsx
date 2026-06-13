@@ -767,13 +767,14 @@ export default function OrderDetail() {
       <div className="bg-white rounded-xl border border-navy-100 p-6 mb-4 shadow-sm">
         <h2 className="font-medium text-navy-700 mb-3 flex items-center gap-2">
           <ClipboardList size={18} className="text-navy-500" />
-          服务项目
+          费用明细
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-navy-50/60">
               <tr>
-                <th className="text-left px-3 py-2.5 text-navy-600 font-medium rounded-l-lg">服务</th>
+                <th className="text-left px-3 py-2.5 text-navy-600 font-medium rounded-l-lg">类型</th>
+                <th className="text-left px-3 py-2.5 text-navy-600 font-medium">项目</th>
                 <th className="text-center px-3 py-2.5 text-navy-600 font-medium">数量</th>
                 <th className="text-right px-3 py-2.5 text-navy-600 font-medium">单价</th>
                 <th className="text-right px-3 py-2.5 text-navy-600 font-medium rounded-r-lg">小计</th>
@@ -781,21 +782,72 @@ export default function OrderDetail() {
             </thead>
             <tbody>
               {order.items.map(item => (
-                <tr key={item.serviceId} className="border-t border-navy-50">
+                <tr key={`svc-${item.serviceId}`} className="border-t border-navy-50">
+                  <td className="px-3 py-2.5">
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600">服务</span>
+                  </td>
                   <td className="px-3 py-2.5 text-navy-700">{item.serviceName}</td>
                   <td className="text-center px-3 py-2.5 text-navy-700">{item.quantity}</td>
                   <td className="text-right px-3 py-2.5 text-navy-600">¥{item.unitPrice.toFixed(2)}</td>
                   <td className="text-right px-3 py-2.5 font-medium text-navy-800">¥{item.subtotal.toFixed(2)}</td>
                 </tr>
               ))}
+              {order.packages && order.packages.map(pkg => (
+                <tr key={`pkg-${pkg.packageId}`} className="border-t border-navy-50">
+                  <td className="px-3 py-2.5">
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-600">套餐</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="text-navy-700">{pkg.packageName}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {pkg.items.map((pi, idx) => (
+                        <span key={idx} className="px-1.5 py-0.5 rounded text-[10px] bg-navy-50 text-navy-400">
+                          {pi.productName}×{pi.quantity}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="text-center px-3 py-2.5 text-navy-700">{pkg.quantity}</td>
+                  <td className="text-right px-3 py-2.5 text-navy-600">
+                    ¥{pkg.unitPrice.toFixed(2)}
+                    {pkg.unitPrice === 0 && <span className="ml-1 text-[10px] text-emerald-500">免费</span>}
+                  </td>
+                  <td className="text-right px-3 py-2.5 font-medium text-navy-800">¥{pkg.subtotal.toFixed(2)}</td>
+                </tr>
+              ))}
+              {order.products && order.products.map(product => (
+                <tr key={`prod-${product.productId}`} className="border-t border-navy-50">
+                  <td className="px-3 py-2.5">
+                    <span className="px-2 py-0.5 rounded text-xs font-medium bg-emerald-50 text-emerald-600">产品</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-navy-700">{product.productName}</span>
+                      {product.unitPrice === 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-100 text-emerald-700">免费</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="text-center px-3 py-2.5 text-navy-700">{product.quantity}</td>
+                  <td className="text-right px-3 py-2.5 text-navy-600">¥{product.unitPrice.toFixed(2)}</td>
+                  <td className="text-right px-3 py-2.5 font-medium text-navy-800">¥{product.subtotal.toFixed(2)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        <div className="border-t border-navy-100 mt-3 pt-3 flex items-end justify-between">
-          <span className="text-xs text-navy-400">共 {order.items.reduce((s, i) => s + i.quantity, 0)} 件</span>
-          <div className="text-right">
-            <span className="text-xs text-navy-400 mr-2">合计金额</span>
-            <span className="text-xl font-semibold text-navy-800">¥{order.totalPrice.toFixed(2)}</span>
+        <div className="border-t border-navy-100 mt-3 pt-3 space-y-2">
+          <div className="flex justify-end text-xs text-navy-400 gap-4">
+            {order.serviceTotal > 0 && <span>服务 ¥{order.serviceTotal.toFixed(2)}</span>}
+            {order.packageTotal > 0 && <span>套餐 ¥{order.packageTotal.toFixed(2)}</span>}
+            {order.productTotal > 0 && <span>产品 ¥{order.productTotal.toFixed(2)}</span>}
+          </div>
+          <div className="flex items-end justify-between">
+            <span className="text-xs text-navy-400">共 {order.items.reduce((s, i) => s + i.quantity, 0)} 件服务{(order.products?.length ?? 0) > 0 ? ` + ${order.products.reduce((s, p) => s + p.quantity, 0)} 份产品` : ''}{(order.packages?.length ?? 0) > 0 ? ` + ${order.packages.reduce((s, p) => s + p.quantity, 0)} 个套餐` : ''}</span>
+            <div className="text-right">
+              <span className="text-xs text-navy-400 mr-2">合计金额</span>
+              <span className="text-xl font-semibold text-navy-800">¥{order.totalPrice.toFixed(2)}</span>
+            </div>
           </div>
         </div>
       </div>

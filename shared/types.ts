@@ -194,6 +194,9 @@ export interface Order {
   products: OrderProduct[]
   packages: OrderPackage[]
   totalPrice: number
+  serviceTotal: number
+  productTotal: number
+  packageTotal: number
   status: OrderStatus
   pickupMethod: PickupMethod
   remark?: string

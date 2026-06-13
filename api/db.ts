@@ -49,6 +49,9 @@ const ready = new Promise<Database>((resolve, reject) => {
           address TEXT,
           pickup_method TEXT NOT NULL CHECK(pickup_method IN ('self', 'delivery')),
           total_price REAL NOT NULL,
+          service_total REAL NOT NULL DEFAULT 0,
+          product_total REAL NOT NULL DEFAULT 0,
+          package_total REAL NOT NULL DEFAULT 0,
           status TEXT NOT NULL DEFAULT 'pending',
           remark TEXT,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -85,6 +88,18 @@ const ready = new Promise<Database>((resolve, reject) => {
           FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         );
       `)
+
+      const orderColumns = db.exec("PRAGMA table_info(orders)")
+      const orderColNames = orderColumns[0]?.values.map(c => c[1]) || []
+      if (!orderColNames.includes('service_total')) {
+        db.run("ALTER TABLE orders ADD COLUMN service_total REAL NOT NULL DEFAULT 0")
+      }
+      if (!orderColNames.includes('product_total')) {
+        db.run("ALTER TABLE orders ADD COLUMN product_total REAL NOT NULL DEFAULT 0")
+      }
+      if (!orderColNames.includes('package_total')) {
+        db.run("ALTER TABLE orders ADD COLUMN package_total REAL NOT NULL DEFAULT 0")
+      }
 
       const columns = db.exec("PRAGMA table_info(status_records)")
       const colNames = columns[0]?.values.map(c => c[1]) || []
@@ -341,7 +356,7 @@ const ready = new Promise<Database>((resolve, reject) => {
             const pkgId = pkgMap.get(pkg)
             if (pkgId) {
               items.forEach(([prodName, qty]) => {
-                const prodId = prodMap.get(prodName)
+                const prodId = prodMap.get(prodName as string)
                 if (prodId) {
                   db.run(
                     'INSERT INTO package_items (package_id, product_id, product_name, quantity) VALUES (?, ?, ?, ?)',

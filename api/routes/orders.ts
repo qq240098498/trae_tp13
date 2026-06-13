@@ -131,7 +131,7 @@ function rowToCompensationRecord(row: any[]): CompensationRecord {
 }
 
 function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageReports: any[] = [], compensationRecords: any[] = [], orderProducts: any[] = [], orderPackages: any[] = []) {
-  const status = String(row[7]) as OrderStatus
+  const status = String(row[10]) as OrderStatus
   const pickupMethod = String(row[5]) as PickupMethod
   return {
     id: String(row[0]),
@@ -141,8 +141,11 @@ function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageRe
     customerAddress: row[4] != null ? String(row[4]) : undefined,
     pickupMethod,
     totalPrice: Number(row[6]),
+    serviceTotal: Number(row[7]) || 0,
+    productTotal: Number(row[8]) || 0,
+    packageTotal: Number(row[9]) || 0,
     status,
-    remark: row[8] != null ? String(row[8]) : undefined,
+    remark: row[11] != null ? String(row[11]) : undefined,
     items: items.map(ir => ({
       serviceId: String(ir[2]),
       serviceName: String(ir[3]),
@@ -198,8 +201,8 @@ function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageRe
     damageReports: damageReports.map(rowToDamageReport),
     compensationRecords: compensationRecords.map(rowToCompensationRecord),
     availableActions: getAvailableActions(status, pickupMethod),
-    createdAt: String(row[9]),
-    updatedAt: String(row[10]),
+    createdAt: String(row[12]),
+    updatedAt: String(row[13]),
   }
 }
 
@@ -575,8 +578,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const totalPrice = serviceTotal + productTotal + packageTotal
 
     db.run(
-      'INSERT INTO orders (order_no, customer_name, customer_phone, address, pickup_method, total_price, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [orderNo, customerName, customerPhone, customerAddress ?? null, pickupMethod, totalPrice, 'pending', remark ?? null],
+      'INSERT INTO orders (order_no, customer_name, customer_phone, address, pickup_method, total_price, service_total, product_total, package_total, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [orderNo, customerName, customerPhone, customerAddress ?? null, pickupMethod, totalPrice, serviceTotal, productTotal, packageTotal, 'pending', remark ?? null],
     )
 
     const orderResult = db.exec('SELECT * FROM orders WHERE order_no = ?', [orderNo])
