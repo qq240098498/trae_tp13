@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { Check } from 'lucide-react'
 
-const steps = ['选择服务', '取送方式', '客户信息', '确认订单']
+const steps = ['选择服务', '选择产品', '取送方式', '客户信息', '确认订单']
 
 export default function StepIndicator({ current }: { current: number }) {
   return (

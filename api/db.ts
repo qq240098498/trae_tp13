@@ -203,6 +203,72 @@ const ready = new Promise<Database>((resolve, reject) => {
         );
       `)
 
+      db.run(`
+        CREATE TABLE IF NOT EXISTS laundry_products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          category TEXT NOT NULL CHECK(category IN ('free', 'paid')),
+          price REAL NOT NULL DEFAULT 0,
+          description TEXT,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `)
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS order_products (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          unit_price REAL NOT NULL,
+          subtotal REAL NOT NULL,
+          FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+        );
+      `)
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS product_packages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          category TEXT NOT NULL CHECK(category IN ('free', 'paid')),
+          package_price REAL NOT NULL DEFAULT 0,
+          original_price REAL NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `)
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS package_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          package_id INTEGER NOT NULL,
+          product_id INTEGER NOT NULL,
+          product_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL DEFAULT 1,
+          FOREIGN KEY (package_id) REFERENCES product_packages(id) ON DELETE CASCADE,
+          FOREIGN KEY (product_id) REFERENCES laundry_products(id) ON DELETE CASCADE
+        );
+      `)
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS order_packages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id INTEGER NOT NULL,
+          package_id INTEGER NOT NULL,
+          package_name TEXT NOT NULL,
+          quantity INTEGER NOT NULL,
+          unit_price REAL NOT NULL,
+          subtotal REAL NOT NULL,
+          items TEXT,
+          FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+        );
+      `)
+
       const count = db.exec('SELECT COUNT(*) AS cnt FROM service_items')
       const rowCount = count[0]?.values[0]?.[0] as number
       if (rowCount === 0) {
@@ -221,6 +287,71 @@ const ready = new Promise<Database>((resolve, reject) => {
             ('皮衣保养', '特殊护理', '件', 100.0, '皮衣清洁上光保养'),
             ('婚纱清洗', '特殊护理', '件', 200.0, '婚纱专业清洗保养');
         `)
+      }
+
+      const productCount = db.exec('SELECT COUNT(*) AS cnt FROM laundry_products')
+      const productRowCount = productCount[0]?.values[0]?.[0] as number
+      if (productRowCount === 0) {
+        db.run(`
+          INSERT INTO laundry_products (name, category, price, description) VALUES
+            ('普通洗衣液', 'free', 0, '基础洗衣液，适合日常衣物'),
+            ('柔顺剂', 'free', 0, '衣物柔顺护理，让衣物更柔软'),
+            ('消毒液', 'free', 0, '专业消毒，杀菌除螨'),
+            ('高级香薰洗衣液', 'paid', 5, '进口香薰洗衣液，持久留香'),
+            ('除菌除螨套装', 'paid', 8, '深度除菌除螨，呵护健康'),
+            ('羊毛专用洗涤剂', 'paid', 10, '羊毛衫专用温和洗涤剂'),
+            ('真丝专用洗涤剂', 'paid', 12, '真丝面料专用护理洗涤剂'),
+            ('衣物防皱护理液', 'paid', 6, '防皱抗静电，衣物更平整'),
+            ('深层去渍套装', 'paid', 15, '顽固污渍深度清洁套装'),
+            ('婴幼儿专用洗涤剂', 'paid', 10, '温和无刺激，适合婴幼儿衣物');
+        `)
+      }
+
+      const packageCount = db.exec('SELECT COUNT(*) AS cnt FROM product_packages')
+      const packageRowCount = packageCount[0]?.values[0]?.[0] as number
+      if (packageRowCount === 0) {
+        db.run(`
+          INSERT INTO product_packages (name, description, category, package_price, original_price) VALUES
+            ('基础护理套餐', '包含普通洗衣液、柔顺剂、消毒液，适合日常衣物洗护', 'free', 0, 0),
+            ('香薰护理套餐', '高级香薰洗衣液+柔顺剂，持久留香，衣物更柔软', 'paid', 8, 10),
+            ('深度清洁套餐', '除菌除螨套装+深层去渍套装，深度清洁，呵护健康', 'paid', 18, 23),
+            ('精致衣物套餐', '羊毛专用洗涤剂+真丝专用洗涤剂+衣物防皱护理液，高档衣物专业护理', 'paid', 22, 28),
+            ('婴幼儿专属套餐', '婴幼儿专用洗涤剂+消毒液+柔顺剂，温和无刺激，专为宝宝设计', 'paid', 15, 20),
+            ('豪华护理套餐', '高级香薰洗衣液+除菌除螨套装+衣物防皱护理液+柔顺剂，全方位护理', 'paid', 20, 25);
+        `)
+
+        const pkgResult = db.exec('SELECT id, name FROM product_packages ORDER BY id')
+        const prodResult = db.exec('SELECT id, name FROM laundry_products ORDER BY id')
+        if (pkgResult[0] && prodResult[0]) {
+          const pkgMap = new Map<string, number>()
+          pkgResult[0].values.forEach(row => pkgMap.set(String(row[1]), Number(row[0])))
+          const prodMap = new Map<string, number>()
+          prodResult[0].values.forEach(row => prodMap.set(String(row[1]), Number(row[0])))
+
+          const packageItems = [
+            { pkg: '基础护理套餐', items: [['普通洗衣液', 1], ['柔顺剂', 1], ['消毒液', 1]] },
+            { pkg: '香薰护理套餐', items: [['高级香薰洗衣液', 1], ['柔顺剂', 1]] },
+            { pkg: '深度清洁套餐', items: [['除菌除螨套装', 1], ['深层去渍套装', 1]] },
+            { pkg: '精致衣物套餐', items: [['羊毛专用洗涤剂', 1], ['真丝专用洗涤剂', 1], ['衣物防皱护理液', 1]] },
+            { pkg: '婴幼儿专属套餐', items: [['婴幼儿专用洗涤剂', 1], ['消毒液', 1], ['柔顺剂', 1]] },
+            { pkg: '豪华护理套餐', items: [['高级香薰洗衣液', 1], ['除菌除螨套装', 1], ['衣物防皱护理液', 1], ['柔顺剂', 1]] },
+          ]
+
+          packageItems.forEach(({ pkg, items }) => {
+            const pkgId = pkgMap.get(pkg)
+            if (pkgId) {
+              items.forEach(([prodName, qty]) => {
+                const prodId = prodMap.get(prodName)
+                if (prodId) {
+                  db.run(
+                    'INSERT INTO package_items (package_id, product_id, product_name, quantity) VALUES (?, ?, ?, ?)',
+                    [pkgId, prodId, prodName, qty]
+                  )
+                }
+              })
+            }
+          })
+        }
       }
 
       saveDb()

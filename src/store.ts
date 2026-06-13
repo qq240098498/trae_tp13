@@ -1,9 +1,11 @@
 import { create } from 'zustand'
-import type { ServiceItem, Order, OrderStatus, AppNotification, PerformActionRequest } from '../shared/types'
+import type { ServiceItem, Order, OrderStatus, AppNotification, PerformActionRequest, LaundryProduct, OrderProduct, ProductPackage } from '../shared/types'
 import * as api from '@/lib/api'
 
 interface AppState {
   services: ServiceItem[]
+  products: LaundryProduct[]
+  packages: ProductPackage[]
   orders: Order[]
   currentOrder: Order | null
   notifications: AppNotification[]
@@ -14,6 +16,16 @@ interface AppState {
   updateService: (id: string, data: Partial<ServiceItem>) => Promise<void>
   deleteService: (id: string) => Promise<void>
 
+  fetchProducts: () => Promise<void>
+  addProduct: (data: Omit<LaundryProduct, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  updateProduct: (id: string, data: Partial<LaundryProduct>) => Promise<void>
+  deleteProduct: (id: string) => Promise<void>
+
+  fetchPackages: () => Promise<void>
+  addPackage: (data: Omit<ProductPackage, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>
+  updatePackage: (id: string, data: Partial<ProductPackage>) => Promise<void>
+  deletePackage: (id: string) => Promise<void>
+
   fetchOrders: (status?: OrderStatus) => Promise<void>
   fetchOrderDetail: (id: string) => Promise<void>
   createOrder: (data: {
@@ -21,6 +33,8 @@ interface AppState {
     customerPhone: string
     customerAddress?: string
     items: { serviceId: string; quantity: number }[]
+    products?: { productId: string; quantity: number }[]
+    packages?: { packageId: string; quantity: number }[]
     pickupMethod: string
     remark?: string
   }) => Promise<Order>
@@ -35,6 +49,8 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set, get) => ({
   services: [],
+  products: [],
+  packages: [],
   orders: [],
   currentOrder: null,
   notifications: [],
@@ -59,6 +75,44 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ services: get().services.filter(s => s.id !== id) })
   },
 
+  fetchProducts: async () => {
+    try { const products = await api.fetchProducts(); set({ products }) } catch {}
+  },
+
+  addProduct: async (data) => {
+    const product = await api.createProduct(data)
+    set({ products: [...get().products, product] })
+  },
+
+  updateProduct: async (id, data) => {
+    const updated = await api.updateProduct(id, data)
+    set({ products: get().products.map(p => p.id === id ? updated : p) })
+  },
+
+  deleteProduct: async (id) => {
+    await api.deleteProduct(id)
+    set({ products: get().products.filter(p => p.id !== id) })
+  },
+
+  fetchPackages: async () => {
+    try { const packages = await api.fetchPackages(); set({ packages }) } catch {}
+  },
+
+  addPackage: async (data) => {
+    const pkg = await api.createPackage(data)
+    set({ packages: [...get().packages, pkg] })
+  },
+
+  updatePackage: async (id, data) => {
+    const updated = await api.updatePackage(id, data)
+    set({ packages: get().packages.map(p => p.id === id ? updated : p) })
+  },
+
+  deletePackage: async (id) => {
+    await api.deletePackage(id)
+    set({ packages: get().packages.filter(p => p.id !== id) })
+  },
+
   fetchOrders: async (status) => {
     try { const orders = await api.fetchOrders(status); set({ orders }) } catch {}
   },
@@ -68,8 +122,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   createOrder: async (data) => {
-    const pricing = await api.calculatePricing(data.items)
-    const order = await api.createOrder({ ...data, items: pricing.items })
+    const pricing = await api.calculatePricingWithProducts(
+      data.items,
+      data.products || [],
+      data.packages || [],
+    )
+    const order = await api.createOrder({ ...data, items: pricing.items, products: pricing.products, packages: pricing.packages })
     set({ orders: [order, ...get().orders] })
     return order
   },

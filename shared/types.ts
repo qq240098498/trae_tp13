@@ -82,6 +82,55 @@ export interface CompensationRule {
   requirePurchaseProof?: boolean
 }
 
+export type ProductCategory = 'free' | 'paid'
+
+export interface LaundryProduct {
+  id: string
+  name: string
+  category: ProductCategory
+  price: number
+  description?: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OrderProduct {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+}
+
+export interface PackageItem {
+  productId: string
+  productName: string
+  quantity: number
+}
+
+export interface ProductPackage {
+  id: string
+  name: string
+  description?: string
+  category: 'free' | 'paid'
+  packagePrice: number
+  originalPrice: number
+  items: PackageItem[]
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OrderPackage {
+  packageId: string
+  packageName: string
+  quantity: number
+  unitPrice: number
+  subtotal: number
+  items: PackageItem[]
+}
+
 export interface ServiceItem {
   id: string
   name: string
@@ -142,6 +191,8 @@ export interface Order {
   customerPhone: string
   customerAddress?: string
   items: OrderItem[]
+  products: OrderProduct[]
+  packages: OrderPackage[]
   totalPrice: number
   status: OrderStatus
   pickupMethod: PickupMethod

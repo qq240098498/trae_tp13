@@ -130,7 +130,7 @@ function rowToCompensationRecord(row: any[]): CompensationRecord {
   }
 }
 
-function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageReports: any[] = [], compensationRecords: any[] = []) {
+function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageReports: any[] = [], compensationRecords: any[] = [], orderProducts: any[] = [], orderPackages: any[] = []) {
   const status = String(row[7]) as OrderStatus
   const pickupMethod = String(row[5]) as PickupMethod
   return {
@@ -150,6 +150,29 @@ function rowToOrder(row: any[], items: any[] = [], history: any[] = [], damageRe
       unitPrice: Number(ir[5]),
       subtotal: Number(ir[6]),
     })),
+    products: orderProducts.map(pr => ({
+      productId: String(pr[2]),
+      productName: String(pr[3]),
+      quantity: Number(pr[4]),
+      unitPrice: Number(pr[5]),
+      subtotal: Number(pr[6]),
+    })),
+    packages: orderPackages.map(pr => {
+      let items: any[] = []
+      try {
+        items = pr[7] != null ? JSON.parse(String(pr[7])) : []
+      } catch {
+        items = []
+      }
+      return {
+        packageId: String(pr[2]),
+        packageName: String(pr[3]),
+        quantity: Number(pr[4]),
+        unitPrice: Number(pr[5]),
+        subtotal: Number(pr[6]),
+        items,
+      }
+    }),
     statusHistory: history.map(hr => {
       let metadata: Record<string, any> | undefined
       try {
@@ -449,12 +472,17 @@ async function executeActionImpl(
   const damageResult = db.exec('SELECT * FROM damage_reports WHERE order_id = ? ORDER BY reported_at DESC, id DESC', [id])
   const compResult = db.exec('SELECT * FROM compensation_records WHERE order_id = ? ORDER BY applied_at DESC, id DESC', [id])
 
+  const productsResult = db.exec('SELECT * FROM order_products WHERE order_id = ?', [id])
+  const packagesResult = db.exec('SELECT * FROM order_packages WHERE order_id = ?', [id])
+
   return rowToOrder(
     finalResult[0].values[0],
     itemsResult[0]?.values ?? [],
     historyResult[0]?.values ?? [],
     damageResult[0]?.values ?? [],
     compResult[0]?.values ?? [],
+    productsResult[0]?.values ?? [],
+    packagesResult[0]?.values ?? [],
   )
 }
 
@@ -486,7 +514,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
       const damages = damageResult[0]?.values ?? []
       const compResult = db.exec('SELECT * FROM compensation_records WHERE order_id = ? ORDER BY applied_at DESC, id DESC', [orderId])
       const comps = compResult[0]?.values ?? []
-      return rowToOrder(row, items, history, damages, comps)
+      const productsResult = db.exec('SELECT * FROM order_products WHERE order_id = ?', [orderId])
+      const orderProducts = productsResult[0]?.values ?? []
+      const packagesResult = db.exec('SELECT * FROM order_packages WHERE order_id = ?', [orderId])
+      const orderPackages = packagesResult[0]?.values ?? []
+      return rowToOrder(row, items, history, damages, comps, orderProducts, orderPackages)
     })
 
     res.json({ success: true, data: orders })
@@ -515,8 +547,12 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     const damages = damageResult[0]?.values ?? []
     const compResult = db.exec('SELECT * FROM compensation_records WHERE order_id = ? ORDER BY applied_at DESC, id DESC', [id])
     const comps = compResult[0]?.values ?? []
+    const productsResult = db.exec('SELECT * FROM order_products WHERE order_id = ?', [id])
+    const orderProducts = productsResult[0]?.values ?? []
+    const packagesResult = db.exec('SELECT * FROM order_packages WHERE order_id = ?', [id])
+    const orderPackages = packagesResult[0]?.values ?? []
 
-    res.json({ success: true, data: rowToOrder(row, items, history, damages, comps) })
+    res.json({ success: true, data: rowToOrder(row, items, history, damages, comps, orderProducts, orderPackages) })
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -524,16 +560,19 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { customerName, customerPhone, customerAddress, items, pickupMethod, remark } = req.body
+    const { customerName, customerPhone, customerAddress, items, products, packages, pickupMethod, remark } = req.body
 
-    if (!customerName || !customerPhone || !items || items.length === 0 || !pickupMethod) {
+    if (!customerName || !customerPhone || ((!items || items.length === 0) && (!products || products.length === 0) && (!packages || packages.length === 0)) || !pickupMethod) {
       res.status(400).json({ success: false, error: '缺少必填字段' })
       return
     }
 
     const db = await getDb()
     const orderNo = generateOrderNo()
-    const totalPrice = items.reduce((sum: number, i: any) => sum + (i.subtotal || 0), 0)
+    const serviceTotal = (items || []).reduce((sum: number, i: any) => sum + (i.subtotal || 0), 0)
+    const productTotal = (products || []).reduce((sum: number, p: any) => sum + (p.subtotal || 0), 0)
+    const packageTotal = (packages || []).reduce((sum: number, p: any) => sum + (p.subtotal || 0), 0)
+    const totalPrice = serviceTotal + productTotal + packageTotal
 
     db.run(
       'INSERT INTO orders (order_no, customer_name, customer_phone, address, pickup_method, total_price, status, remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
@@ -551,6 +590,20 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       db.run(
         'INSERT INTO order_items (order_id, service_id, service_name, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
         [orderId, item.serviceId, item.serviceName, item.quantity, item.unitPrice, item.subtotal],
+      )
+    }
+
+    for (const product of (products || [])) {
+      db.run(
+        'INSERT INTO order_products (order_id, product_id, product_name, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)',
+        [orderId, product.productId, product.productName, product.quantity, product.unitPrice, product.subtotal],
+      )
+    }
+
+    for (const pkg of (packages || [])) {
+      db.run(
+        'INSERT INTO order_packages (order_id, package_id, package_name, quantity, unit_price, subtotal, items) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [orderId, pkg.packageId, pkg.packageName, pkg.quantity, pkg.unitPrice, pkg.subtotal, JSON.stringify(pkg.items || [])],
       )
     }
 
@@ -575,6 +628,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     const finalResult = db.exec('SELECT * FROM orders WHERE id = ?', [orderId])
     const itemsResult = db.exec('SELECT * FROM order_items WHERE order_id = ?', [orderId])
     const historyResult = db.exec('SELECT * FROM status_records WHERE order_id = ? ORDER BY timestamp, id', [orderId])
+    const productsResult = db.exec('SELECT * FROM order_products WHERE order_id = ?', [orderId])
+    const packagesResult = db.exec('SELECT * FROM order_packages WHERE order_id = ?', [orderId])
 
     res.json({
       success: true,
@@ -584,6 +639,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         historyResult[0]?.values ?? [],
         [],
         [],
+        productsResult[0]?.values ?? [],
+        packagesResult[0]?.values ?? [],
       ),
     })
   } catch (err: any) {
